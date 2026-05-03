@@ -1,5 +1,6 @@
-import matplotlib.pyplot as plt
 import os
+import matplotlib.pyplot as plt
+import torch
 
 def plot_results(t_eval, sol, res_t, res_d, save_dir):
     plt.figure(figsize=(15, 6))

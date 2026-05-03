@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class PINN(nn.Module):
-    def __init__(self, layers, initial_condition=None):
+    def __init__(self, layers=[1, 128, 128, 128, 3], initial_condition=None):
         super().__init__()
         self.net = nn.Sequential(*self.build_layers(layers))
         self.initial_condition = initial_condition

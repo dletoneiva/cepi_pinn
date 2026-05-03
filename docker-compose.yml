@@ -1,0 +1,30 @@
+
+services:
+  app:
+    image: phys-sir-env
+    # Define o diretório de trabalho dentro do contentor
+    working_dir: /app
+    # Mapeia a pasta atual no WSL para a pasta /app no Docker
+    volumes:
+      - .:/app
+    # Mantém o contentor aberto para comandos interativos (equivalente ao -it)
+    ports:
+      - "8888:8888"
+    tty: true
+    stdin_open: true
+    # Configuração crucial para aceder aos núcleos CUDA da NVIDIA
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    command: >
+      jupyter lab 
+      --ip=0.0.0.0 
+      --port=8888 
+      --no-browser 
+      --allow-root 
+      --ServerApp.token='token_jupyter'

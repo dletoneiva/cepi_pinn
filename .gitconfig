@@ -1,0 +1,5 @@
+[user]
+	name = dletoneiva
+	email = dletoneiva@gmail.com
+[credential]
+	helper = "!f() { /app/.vscode-server/bin/034f571df509819cc10b0c8129f66ef77a542f0e/node /tmp/vscode-remote-containers-a3492b56-4c3f-4eaa-8c69-f9b5eb7dcb43.js git-credential-helper $*; }; f"

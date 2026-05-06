@@ -20,7 +20,17 @@ RUN pip3 install --no-cache-dir \
     matplotlib \
     seaborn \
     pydantic \
-    jupyterlab notebook ipykernel aider-chat
+    jupyterlab \
+    notebook \
+    ipykernel \
+    aider-chat \
+    hydra-core \
+    mlflow \
+    torchdiffeq \
+    pytest \
+    black \
+    isort \
+    flake8
 
 # Cria o diretório de trabalho
 WORKDIR /app

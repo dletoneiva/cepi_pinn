@@ -1,6 +1,9 @@
 
 services:
   app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: phys-sir-env
     # Define o diretório de trabalho dentro do contentor
     working_dir: /app
@@ -10,16 +13,24 @@ services:
     # Mantém o contentor aberto para comandos interativos (equivalente ao -it)
     ports:
       - "8888:8888"
+
+    environment:
+      - HOME=/app
+      - XDG_CACHE_HOME=/app/.cache
+      - XDG_CONFIG_HOME=/app/.config
+      
     tty: true
     stdin_open: true
     # Configuração crucial para aceder aos núcleos CUDA da NVIDIA
     deploy:
       resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+        limits:
+          memory: 10G
+        # reservations:
+        #   devices:
+        #     - driver: nvidia
+        #       count: all
+        #       capabilities: [gpu]
 
     command: >
       jupyter lab 
@@ -28,3 +39,8 @@ services:
       --no-browser 
       --allow-root 
       --ServerApp.token='token_jupyter'
+      >
+      sleep infinity
+      
+    user: "1000:1000"
+  

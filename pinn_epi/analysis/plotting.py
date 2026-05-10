@@ -172,7 +172,8 @@ def plot_compartmental_solution(
         # Add legend above the plot with proper spacing
         legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
                           columnspacing=1.5, handletextpad=0.5)
-        plt.tight_layout(rect=[0, 0.15, 1, 0.92])  # Adjust margins to avoid overlap
+        # Use subplots_adjust instead of tight_layout for more robust control
+        plt.subplots_adjust(left=0.1, right=0.95, top=0.85, bottom=0.25)
 
     # Add model information as text below the figure with line wrapping
     param_str = ", ".join([f"{k}={v}" for k, v in params.items()])
@@ -182,9 +183,16 @@ def plot_compartmental_solution(
     # Wrap text to fit within figure width
     wrapped_text = textwrap.fill(info_text, width=80)
     
+    # Count lines in wrapped text
+    lines = wrapped_text.count('\n') + 1
+    
+    # Adjust font size if text exceeds 2 lines
+    font_size = 16
+    if lines > 2:
+        font_size = max(10, 16 - (lines - 2) * 2)  # Reduce font size but keep minimum of 10
+    
     # Position text just below the x-axis label using axes coordinates
-    # This is more reliable than figure coordinates and works with tight_layout
-    ax.text(0.5, -0.15, wrapped_text, ha='center', va='top', fontsize=16,
+    ax.text(0.5, -0.25, wrapped_text, ha='center', va='top', fontsize=font_size,
             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
             transform=ax.transAxes)
 

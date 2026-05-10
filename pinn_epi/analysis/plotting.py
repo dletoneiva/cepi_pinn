@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 import datetime
+import textwrap
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -32,7 +33,7 @@ NATURE_STYLE: dict = {
     'xtick.labelsize': 18,
     'ytick.labelsize': 18,
     'legend.fontsize': 18,
-    'figure.dpi': 100,
+    'figure.dpi': 300,  # Default resolution
 }
 
 # Color-blind friendly palette
@@ -41,6 +42,13 @@ COMPARTMENT_COLORS = {
     'E': '#ff7f0e',  # orange
     'I': '#d62728',  # red
     'R': '#2ca02c',  # green
+}
+
+# Resolution levels
+RESOLUTION_LEVELS = {
+    'low': 300,
+    'medium': 600,
+    'high': 1200
 }
 
 def apply_nature_style() -> None:
@@ -63,6 +71,7 @@ def plot_compartmental_solution(
     ax: Optional[plt.Axes] = None,
     show: bool = False,
     save_path: Optional[str] = None,
+    resolution: str = 'medium',
     **solve_ivp_kwargs,
 ) -> tuple[plt.Figure, plt.Axes, dict[str, np.ndarray]]:
     """Solve and plot the ODE system defined by any CompartmentalModel.
@@ -88,6 +97,7 @@ def plot_compartmental_solution(
             the caller controls display.
         save_path: Optional file path to save the figure (e.g.
             'figures/sir_sanity.png').  Directory must exist.
+        resolution: Figure resolution level ('low'=300, 'medium'=600, 'high'=1200).
         **solve_ivp_kwargs: Extra keyword arguments forwarded to
             scipy.integrate.solve_ivp (e.g. method='RK45', rtol=1e-8).
 
@@ -98,6 +108,11 @@ def plot_compartmental_solution(
     """
     import torch  # local import keeps plotting.py importable without torch
 
+    # Set resolution
+    if resolution not in RESOLUTION_LEVELS:
+        raise ValueError(f"Resolution must be one of {list(RESOLUTION_LEVELS.keys())}")
+    dpi_value = RESOLUTION_LEVELS[resolution]
+    
     if t_eval is None:
         t_eval = np.linspace(t_span[0], t_span[1], 300)
 
@@ -136,7 +151,7 @@ def plot_compartmental_solution(
     # --- plotting ---
     created_fig = ax is None
     if created_fig:
-        fig, ax = plt.subplots(figsize=(12, 8))
+        fig, ax = plt.subplots(figsize=(12, 8), dpi=dpi_value)
     else:
         fig = ax.get_figure()
 
@@ -153,22 +168,25 @@ def plot_compartmental_solution(
     if title:
         ax.set_title(title, pad=60)  # Add padding to avoid overlap with legend
 
-    # Add model information as text below the figure
+    # Add model information as text below the figure with line wrapping
     param_str = ", ".join([f"{k}={v}" for k, v in params.items()])
     y0_str = ", ".join([f"{name}(0)={y0[i]:.2f}" for i, name in enumerate(compartment_names)])
     info_text = f"Parameters: {param_str} | Initial: {y0_str}"
     
-    fig.text(0.5, 0.02, info_text, ha='center', fontsize=16,
+    # Wrap text to fit within figure width
+    wrapped_text = textwrap.fill(info_text, width=80)
+    
+    fig.text(0.5, 0.07, wrapped_text, ha='center', fontsize=16,
              bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
     if created_fig:
         # Add legend above the plot with proper spacing
-        legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.15), ncol=len(compartment_names), 
+        legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
                           columnspacing=1.5, handletextpad=0.5)
         plt.tight_layout(rect=[0, 0.08, 1, 0.92])  # Adjust margins to avoid overlap
 
     if save_path:
-        fig.savefig(save_path, bbox_inches='tight')
+        fig.savefig(save_path, bbox_inches='tight', dpi=dpi_value)
         print(f"  Saved → {save_path}")
 
     if show:

@@ -172,7 +172,6 @@ def plot_compartmental_solution(
         # Add legend above the plot with proper spacing
         legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
                           columnspacing=1.5, handletextpad=0.5)
-        # Use subplots_adjust instead of tight_layout for more robust control
         plt.subplots_adjust(left=0.1, right=0.95, top=0.85, bottom=0.25)
 
     # Add model information as text below the figure with line wrapping

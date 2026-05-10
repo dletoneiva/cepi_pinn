@@ -168,6 +168,12 @@ def plot_compartmental_solution(
     if title:
         ax.set_title(title, pad=60)  # Add padding to avoid overlap with legend
 
+    if created_fig:
+        # Add legend above the plot with proper spacing
+        legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
+                          columnspacing=1.5, handletextpad=0.5)
+        plt.tight_layout(rect=[0, 0.15, 1, 0.92])  # Adjust margins to avoid overlap
+
     # Add model information as text below the figure with line wrapping
     param_str = ", ".join([f"{k}={v}" for k, v in params.items()])
     y0_str = ", ".join([f"{name}(0)={y0[i]:.2f}" for i, name in enumerate(compartment_names)])
@@ -176,22 +182,11 @@ def plot_compartmental_solution(
     # Wrap text to fit within figure width
     wrapped_text = textwrap.fill(info_text, width=80)
     
-    # Position text dynamically right below the x-axis label
-    fig.canvas.draw()  # Needed to get correct positions
-    x_axis_label_bbox = ax.xaxis.get_label().get_window_extent()
-    fig_bbox = fig.bbox
-    # Convert to figure coordinates with a tighter offset (10 pixels instead of 40)
-    y_pos = (x_axis_label_bbox.y0 - 10) / fig_bbox.height
-    
-    fig.text(0.5, y_pos, wrapped_text, ha='center', va='top', fontsize=16,
-             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
-             transform=fig.transFigure)
-
-    if created_fig:
-        # Add legend above the plot with proper spacing
-        legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
-                          columnspacing=1.5, handletextpad=0.5)
-        plt.tight_layout(rect=[0, 0.12, 1, 0.92])  # Adjust margins to avoid overlap
+    # Position text just below the x-axis label using axes coordinates
+    # This is more reliable than figure coordinates and works with tight_layout
+    ax.text(0.5, -0.15, wrapped_text, ha='center', va='top', fontsize=16,
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+            transform=ax.transAxes)
 
     if save_path:
         fig.savefig(save_path, bbox_inches='tight', dpi=dpi_value)

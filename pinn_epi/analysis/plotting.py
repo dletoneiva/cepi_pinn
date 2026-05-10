@@ -176,14 +176,15 @@ def plot_compartmental_solution(
     # Wrap text to fit within figure width
     wrapped_text = textwrap.fill(info_text, width=80)
     
-    fig.text(0.5, 0.07, wrapped_text, ha='center', fontsize=16,
+    # Position text at the bottom, growing upward
+    fig.text(0.5, 0.02, wrapped_text, ha='center', va='bottom', fontsize=16,
              bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
     if created_fig:
         # Add legend above the plot with proper spacing
         legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
                           columnspacing=1.5, handletextpad=0.5)
-        plt.tight_layout(rect=[0, 0.08, 1, 0.92])  # Adjust margins to avoid overlap
+        plt.tight_layout(rect=[0, 0.15, 1, 0.92])  # Adjust margins to avoid overlap
 
     if save_path:
         fig.savefig(save_path, bbox_inches='tight', dpi=dpi_value)

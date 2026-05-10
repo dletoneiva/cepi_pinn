@@ -2,3 +2,6 @@
 .local*
 .ipython*
 ./figures/*
+./configs/*
+./unity_tests/*
+.lista.md

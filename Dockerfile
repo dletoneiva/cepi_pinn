@@ -37,6 +37,7 @@ WORKDIR /app
 
 # Adiciona o diretório atual ao PYTHONPATH
 ENV PYTHONPATH=/app:$PYTHONPATH
+ENV HYDRA_FULL_ERROR=1
 
 # Copia os arquivos do projeto
 COPY . /app

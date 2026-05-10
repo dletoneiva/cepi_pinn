@@ -1,0 +1,19 @@
+experiment: sir_base.yaml
+model:
+  type: SIRModel
+  parameters:
+    beta: 0.4
+    gamma: 0.1
+simulation:
+  t_span:
+  - 0
+  - 60
+  y0:
+  - 0.99
+  - 0.01
+  - 0.0
+  t_eval_points: 300
+plotting:
+  title: SIR Model Simulation
+  resolution: medium
+  show_plot: false

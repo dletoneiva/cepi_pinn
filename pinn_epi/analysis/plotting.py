@@ -176,9 +176,17 @@ def plot_compartmental_solution(
     # Wrap text to fit within figure width
     wrapped_text = textwrap.fill(info_text, width=80)
     
-    # Position text just below the x-axis label to prevent overlap
-    fig.text(0.5, 0.02, wrapped_text, ha='center', va='top', fontsize=16,
-             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    # Position text dynamically right below the x-axis label
+    fig.canvas.draw()  # Needed to get correct positions
+    x_axis_label_pos = ax.xaxis.get_label().get_position()
+    x_axis_label_bbox = ax.xaxis.get_label().get_window_extent()
+    fig_bbox = fig.bbox
+    # Convert to figure coordinates
+    y_pos = (x_axis_label_bbox.y0 - 40) / fig_bbox.height  # 40 pixels below x-axis label
+    
+    fig.text(0.5, y_pos, wrapped_text, ha='center', va='top', fontsize=16,
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+             transform=fig.transFigure)
 
     if created_fig:
         # Add legend above the plot with proper spacing

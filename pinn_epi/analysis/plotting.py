@@ -53,7 +53,8 @@ def plot_compartmental_solution(
     compartment_colors: Optional[dict[str, str]] = None,
     title: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
-    show: bool = True,
+    show: bool = False,
+    save_path: Optional[str] = None,
     **solve_ivp_kwargs,
 ) -> tuple[plt.Figure, plt.Axes, dict[str, np.ndarray]]:
     """Solve and plot the ODE system defined by any CompartmentalModel.
@@ -63,19 +64,22 @@ def plot_compartmental_solution(
     model without modification.
 
     Args:
-        model: Any instance of CompartmentalModel (SIRModel, SEIRModel, …).
+        model: Any instance of CompartmentalModel (SIRModel, SEIRModel, ...).
         t_span: [t_start, t_end] integration interval.
         y0: Initial conditions, one value per compartment in the same order
             as model.compartment_names.
         params: Parameter dict forwarded to model.get_derivatives.
         t_eval: Optional array of time points at which to store the solution.
             Defaults to 300 evenly-spaced points over t_span.
-        compartment_colors: Optional mapping of compartment name → colour
+        compartment_colors: Optional mapping of compartment name to colour
             string, e.g. {'S': 'blue', 'I': 'red', 'R': 'green'}.
         title: Optional plot title.
         ax: Optional existing Axes to draw on.  If None a new figure is
             created.
-        show: Whether to call plt.show() at the end.
+        show: Whether to call plt.show() at the end.  Defaults to False so
+            the caller controls display.
+        save_path: Optional file path to save the figure (e.g.
+            'figures/sir_sanity.png').  Directory must exist.
         **solve_ivp_kwargs: Extra keyword arguments forwarded to
             scipy.integrate.solve_ivp (e.g. method='RK45', rtol=1e-8).
 
@@ -154,8 +158,14 @@ def plot_compartmental_solution(
         color='gray',
     )
 
-    if show and created_fig:
+    if created_fig:
         plt.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches='tight')
+        print(f"  Saved → {save_path}")
+
+    if show:
         plt.show()
 
     return fig, ax, trajectories
@@ -173,7 +183,9 @@ def plot_figure_1_corrected(
     gamma_true: float,
     ambiguous_pairs: Optional[list[tuple[float, float]]] = None,
     t_transition: float = 12,
-) -> None:
+    show: bool = False,
+    save_path: Optional[str] = None,
+) -> plt.Figure:
     """Plot epidemic dynamics showing the identifiability problem.
 
     Args:
@@ -185,18 +197,20 @@ def plot_figure_1_corrected(
         ambiguous_pairs: List of (beta, gamma) pairs with same r = beta-gamma.
             Defaults to four pairs around the true values.
         t_transition: Time at which to draw the exponential/nonlinear boundary.
-    """
-    from scipy.integrate import solve_ivp as _solve
+        show: Whether to call plt.show().  Defaults to False.
+        save_path: Optional file path to save the figure.
 
+    Returns:
+        The matplotlib Figure object.
+    """
     def _sir(t, y, b, g):
         S, I, R = y
         return [-b * S * I, b * S * I - g * I, g * I]
 
     if ambiguous_pairs is None:
-        r = beta_true - gamma_true
         ambiguous_pairs = [
             (beta_true - 0.05, gamma_true - 0.05),
-            (beta_true, gamma_true),
+            (beta_true,        gamma_true),
             (beta_true + 0.05, gamma_true + 0.05),
             (beta_true + 0.10, gamma_true + 0.10),
         ]
@@ -205,12 +219,13 @@ def plot_figure_1_corrected(
     colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(ambiguous_pairs)))
 
     for (b, g), color in zip(ambiguous_pairs, colors):
-        sol = _solve(_sir, [0, t_max], y0, args=(b, g), t_eval=t_eval)
-        lw = 3.0 if (b == beta_true and g == gamma_true) else 2.0
-        alpha = 1.0 if (b == beta_true and g == gamma_true) else 0.4
+        sol = solve_ivp(_sir, [0, t_max], y0, args=(b, g), t_eval=t_eval)
+        is_truth = (b == beta_true and g == gamma_true)
+        lw = 3.0 if is_truth else 2.0
+        alpha = 1.0 if is_truth else 0.4
         label_str = (
             rf'Truth: $\beta={b:.2f}, \gamma={g:.2f}$'
-            if (b == beta_true and g == gamma_true)
+            if is_truth
             else rf'$\beta={b:.2f}, \gamma={g:.2f}$'
         )
         ax.plot(t_eval, sol.y[1], color=color, lw=lw, ls='--', alpha=alpha, label=label_str)
@@ -225,7 +240,15 @@ def plot_figure_1_corrected(
     ax.set_ylabel('Infected Fraction $I(t)$')
     ax.legend(frameon=True, loc='upper left', facecolor='white')
     plt.tight_layout()
-    plt.show()
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches='tight')
+        print(f"  Saved → {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +263,9 @@ def plot_hessian_scalarization_r(
     lambda_phys: float = 1.0,
     b_range: Optional[np.ndarray] = None,
     h_step: float = 0.005,
-) -> None:
+    show: bool = False,
+    save_path: Optional[str] = None,
+) -> plt.Figure:
     """Plot normalised Hessian curves for data, physics, and total loss.
 
     Args:
@@ -251,9 +276,12 @@ def plot_hessian_scalarization_r(
         lambda_phys: Weight on physics loss in total Hessian.
         b_range: Beta values to sweep.  Defaults to linspace(0, 1, 45).
         h_step: Finite-difference step size.
-    """
-    from scipy.integrate import solve_ivp as _solve
+        show: Whether to call plt.show().  Defaults to False.
+        save_path: Optional file path to save the figure.
 
+    Returns:
+        The matplotlib Figure object.
+    """
     def _sir(t, y, b, g):
         S, I, R = y
         return [-b * S * I, b * S * I - g * I, g * I]
@@ -263,9 +291,9 @@ def plot_hessian_scalarization_r(
 
     hn_data, hn_phys, hn_total = [], [], []
 
-    print("Calculating Hessians via finite differences...")
+    print("  Calculating Hessians via finite differences...")
     for b_val in b_range:
-        sol_ref = _solve(_sir, [0, t_max], y0, args=(b_val, gamma_true), t_eval=t_eval)
+        sol_ref = solve_ivp(_sir, [0, t_max], y0, args=(b_val, gamma_true), t_eval=t_eval)
         S_ref, I_ref = sol_ref.y[0], sol_ref.y[1]
         dI_dt_ref = b_val * S_ref * I_ref - gamma_true * I_ref
         energy = np.sum(I_ref ** 2)
@@ -273,7 +301,7 @@ def plot_hessian_scalarization_r(
         loss_d, loss_p = [], []
         for shift in [-h_step, 0, h_step]:
             b_shift = b_val + shift
-            sol_s = _solve(_sir, [0, t_max], y0, args=(b_shift, gamma_true), t_eval=t_eval)
+            sol_s = solve_ivp(_sir, [0, t_max], y0, args=(b_shift, gamma_true), t_eval=t_eval)
             loss_d.append(np.sum((sol_s.y[1] - I_ref) ** 2))
             residual = dI_dt_ref - (b_shift * S_ref * I_ref - gamma_true * I_ref)
             loss_p.append(np.sum(residual ** 2))
@@ -287,7 +315,9 @@ def plot_hessian_scalarization_r(
             hn_phys.append(hp / energy)
             hn_total.append(ht / energy)
         else:
-            hn_data.append(0); hn_phys.append(0); hn_total.append(0)
+            hn_data.append(0)
+            hn_phys.append(0)
+            hn_total.append(0)
 
     def _format_panel(ax, y_data, title_suffix, show_ylabel):
         ax.plot(b_range, y_data, color='black', lw=3.0)
@@ -320,18 +350,35 @@ def plot_hessian_scalarization_r(
                frameon=True, loc='upper center', bbox_to_anchor=(0.5, 1.05),
                ncol=2, facecolor='white', fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
-    plt.show()
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches='tight')
+        print(f"  Saved → {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig
 
 
 # ---------------------------------------------------------------------------
 # SIR bifurcation diagram
 # ---------------------------------------------------------------------------
 
-def plot_sir_bifurcation(gamma: float = 0.4) -> None:
+def plot_sir_bifurcation(
+    gamma: float = 0.4,
+    show: bool = False,
+    save_path: Optional[str] = None,
+) -> plt.Figure:
     """Plot the SIR bifurcation diagram (DFE vs endemic equilibrium).
 
     Args:
         gamma: Recovery rate that sets the bifurcation point.
+        show: Whether to call plt.show().  Defaults to False.
+        save_path: Optional file path to save the figure.
+
+    Returns:
+        The matplotlib Figure object.
     """
     beta_range = np.linspace(0, 1.0, 500)
     dfe_branch = np.zeros_like(beta_range)
@@ -356,7 +403,15 @@ def plot_sir_bifurcation(gamma: float = 0.4) -> None:
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     plt.tight_layout()
-    plt.show()
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches='tight')
+        print(f"  Saved → {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -369,7 +424,9 @@ def plot_windowed_results(
     results_d: list[np.ndarray],
     sol_ref,
     t_eval_ref: np.ndarray,
-) -> None:
+    show: bool = False,
+    save_path: Optional[str] = None,
+) -> plt.Figure:
     """Plot windowed PINN predictions against ground truth.
 
     Args:
@@ -378,6 +435,11 @@ def plot_windowed_results(
         results_d: List of prediction arrays for the 'drift' model per window.
         sol_ref: scipy ODE solution object for ground truth.
         t_eval_ref: Full time array corresponding to sol_ref.
+        show: Whether to call plt.show().  Defaults to False.
+        save_path: Optional file path to save the figure.
+
+    Returns:
+        The matplotlib Figure object.
     """
     fig, axs = plt.subplots(2, 2, figsize=(15, 6))
     titles = ['Susceptibles (S) (a)', 'Infected (I) (b)',
@@ -424,4 +486,12 @@ def plot_windowed_results(
         ncol=3, frameon=True, facecolor='white', fontsize=16,
     )
     plt.tight_layout()
-    plt.show()
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches='tight')
+        print(f"  Saved → {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig

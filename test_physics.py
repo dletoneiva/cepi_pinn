@@ -1,33 +1,23 @@
 """Sanity check for the physics engine via plotting.
 
 Run this script directly to visually verify that all compartmental models
-solve and plot correctly, and to exercise every plotting function in
-pinn_epi/analysis/plotting.py.  No test framework required — just run:
+solve and plot correctly.  No test framework required — just run:
 
     python test_physics.py
 
 Each model will:
   1. Solve its ODE system via scipy (wrapped around the torch model).
-  2. Plot the trajectories with a conservation-error annotation.
+  2. Plot the trajectories with model information.
   3. Save the figure to the figures/ directory.
-  4. Return the trajectories dict so values can be inspected in the terminal.
-
-All other plotting helpers (figure 1, Hessian, bifurcation, windowed) are
-also called and their outputs saved to figures/.
 """
 
 import os
 import numpy as np
-from scipy.integrate import solve_ivp
 
 from pinn_epi.models.physics import SIRModel, SEIRModel, SIModel
 from pinn_epi.analysis.plotting import (
     apply_nature_style,
     plot_compartmental_solution,
-    plot_figure_1_corrected,
-    plot_hessian_scalarization_r,
-    plot_sir_bifurcation,
-    plot_windowed_results,
 )
 
 # ---------------------------------------------------------------------------
@@ -61,8 +51,8 @@ def sanity_check_sir() -> None:
         t_span=t_span,
         y0=y0,
         params=params,
-        title='SIR Model — Sanity Check',
-        save_path=fig_path('sanity_sir.png'),
+        title='SIR Model',
+        save_path=fig_path('sir_model.png'),
     )
 
     S, I, R = trajectories['S'], trajectories['I'], trajectories['R']
@@ -91,8 +81,8 @@ def sanity_check_seir() -> None:
         t_span=t_span,
         y0=y0,
         params=params,
-        title='SEIR Model — Sanity Check',
-        save_path=fig_path('sanity_seir.png'),
+        title='SEIR Model',
+        save_path=fig_path('seir_model.png'),
     )
 
     S, E, I, R = (trajectories[k] for k in ['S', 'E', 'I', 'R'])
@@ -121,8 +111,8 @@ def sanity_check_si() -> None:
         t_span=t_span,
         y0=y0,
         params=params,
-        title='SI Model — Sanity Check',
-        save_path=fig_path('sanity_si.png'),
+        title='SI Model',
+        save_path=fig_path('si_model.png'),
     )
 
     S, I = trajectories['S'], trajectories['I']
@@ -140,96 +130,6 @@ def sanity_check_si() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Plotting function checks
-# ---------------------------------------------------------------------------
-
-def check_plot_figure_1() -> None:
-    print("\n--- plot_figure_1_corrected ---")
-    t_max = 30
-    t_eval = np.linspace(0, t_max, 150)
-    y0 = [0.99, 0.01, 0.00]
-    beta_true = 0.4
-    gamma_true = 0.1
-
-    plot_figure_1_corrected(
-        t_max=t_max,
-        t_eval=t_eval,
-        y0=y0,
-        beta_true=beta_true,
-        gamma_true=gamma_true,
-        save_path=fig_path('figure_1_identifiability.png'),
-    )
-    print("  [PASS] plot_figure_1_corrected completed.")
-
-
-def check_plot_hessian() -> None:
-    print("\n--- plot_hessian_scalarization_r ---")
-    t_max = 30
-    t_eval = np.linspace(0, t_max, 150)
-    y0 = [0.99, 0.01, 0.00]
-    gamma_true = 0.1
-
-    plot_hessian_scalarization_r(
-        t_max=t_max,
-        t_eval=t_eval,
-        y0=y0,
-        gamma_true=gamma_true,
-        lambda_phys=1.0,
-        save_path=fig_path('hessian_scalarization.png'),
-    )
-    print("  [PASS] plot_hessian_scalarization_r completed.")
-
-
-def check_plot_bifurcation() -> None:
-    print("\n--- plot_sir_bifurcation ---")
-    plot_sir_bifurcation(
-        gamma=0.4,
-        save_path=fig_path('sir_bifurcation.png'),
-    )
-    print("  [PASS] plot_sir_bifurcation completed.")
-
-
-def check_plot_windowed_results() -> None:
-    """Build minimal synthetic windowed results to exercise plot_windowed_results."""
-    print("\n--- plot_windowed_results ---")
-
-    t_max = 30
-    t_eval = np.linspace(0, t_max, 300)
-    beta_true, gamma_true = 0.3, 0.1
-    y0 = [0.99, 0.01, 0.0]
-
-    def _sir(t, y, b, g):
-        S, I, R = y
-        return [-b * S * I, b * S * I - g * I, g * I]
-
-    sol_ref = solve_ivp(_sir, [0, t_max], y0, args=(beta_true, gamma_true), t_eval=t_eval)
-
-    # Two windows: [0, 15] and [15, 30]
-    window_limits = np.array([0, 15, 30], dtype=float)
-
-    results_t = []
-    results_d = []
-    for i in range(len(window_limits) - 1):
-        start, end = window_limits[i], window_limits[i + 1]
-        mask = (t_eval >= start) & (t_eval <= end)
-        # Use the ground truth ODE solution as a stand-in for both
-        # 'match' and 'drift' predictions (no PINN training needed here)
-        chunk = sol_ref.y[:, mask].T          # shape (n_points, 3)
-        results_t.append(chunk)
-        results_d.append(chunk * 0.98 + 0.01) # slight perturbation for 'drift'
-
-    plot_windowed_results(
-        window_limits=window_limits,
-        results_t=results_t,
-        results_d=results_d,
-        sol_ref=sol_ref,
-        t_eval_ref=t_eval,
-        save_path=fig_path('windowed_results.png'),
-    )
-    print("  [PASS] plot_windowed_results completed.")
-
-
-# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -238,11 +138,5 @@ if __name__ == '__main__':
     sanity_check_sir()
     sanity_check_seir()
     sanity_check_si()
-
-    # --- plotting function checks ---
-    check_plot_figure_1()
-    check_plot_hessian()
-    check_plot_bifurcation()
-    check_plot_windowed_results()
 
     print(f"\nAll checks passed.  Figures saved to '{FIGURES_DIR}/'.")

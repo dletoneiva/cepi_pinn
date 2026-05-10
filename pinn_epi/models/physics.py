@@ -1,53 +1,90 @@
-"""Compartmental model base class and SIR implementation."""
 import abc
 import torch
 
 
 class CompartmentalModel(abc.ABC):
-    """Abstract base class for compartmental epidemiological models."""
+    """Abstract base class for compartmental epidemiological models.
     
+    Subclasses must implement:
+        - get_derivatives: the ODE right-hand side
+        - compartment_names: list of compartment labels (e.g. ['S', 'I', 'R'])
+    """
+
+    @property
     @abc.abstractmethod
-    def get_derivatives(self, t: torch.Tensor, u: torch.Tensor, params: dict) -> torch.Tensor:
-        """Calculate time derivatives of compartment variables.
-        
+    def compartment_names(self) -> list[str]:
+        """Return ordered list of compartment names, e.g. ['S', 'I', 'R']."""
+        pass
+
+    @abc.abstractmethod
+    def get_derivatives(
+        self, t: torch.Tensor, u: torch.Tensor, params: dict
+    ) -> torch.Tensor:
+        """Compute time derivatives of all compartments.
+
         Args:
-            t: Time tensor
-            u: State variables tensor with shape (..., n_compartments)
-            params: Model parameters dictionary
-            
+            t: scalar time tensor
+            u: state tensor of shape (..., n_compartments)
+            params: dict of model parameters
+
         Returns:
-            Time derivatives tensor with same shape as u
+            Tensor of same shape as u containing du/dt
         """
         pass
 
 
 class SIRModel(CompartmentalModel):
     """SIR (Susceptible-Infected-Recovered) epidemiological model."""
-    
-    def get_derivatives(self, t: torch.Tensor, u: torch.Tensor, params: dict) -> torch.Tensor:
-        """Calculate SIR model derivatives.
-        
-        Args:
-            t: Time tensor
-            u: State variables tensor with shape (..., 3) where last dimension is S, I, R
-            params: Model parameters dictionary containing 'beta' and 'gamma'
-            
-        Returns:
-            Time derivatives tensor with shape (..., 3) for dS/dt, dI/dt, dR/dt
-        """
-        # Extract compartments
-        S = u[..., 0]
-        I = u[..., 1]
-        R = u[..., 2]
-        
-        # Extract parameters
-        beta = params['beta']
-        gamma = params['gamma']
-        
-        # Calculate derivatives using SIR equations
+
+    @property
+    def compartment_names(self) -> list[str]:
+        return ['S', 'I', 'R']
+
+    def get_derivatives(
+        self, t: torch.Tensor, u: torch.Tensor, params: dict
+    ) -> torch.Tensor:
+        S, I, R = u[..., 0], u[..., 1], u[..., 2]
+        beta: float = params['beta']
+        gamma: float = params['gamma']
         dS_dt = -beta * S * I
         dI_dt = beta * S * I - gamma * I
         dR_dt = gamma * I
-        
-        # Stack and return derivatives
         return torch.stack([dS_dt, dI_dt, dR_dt], dim=-1)
+
+
+class SEIRModel(CompartmentalModel):
+    """SEIR (Susceptible-Exposed-Infected-Recovered) epidemiological model."""
+
+    @property
+    def compartment_names(self) -> list[str]:
+        return ['S', 'E', 'I', 'R']
+
+    def get_derivatives(
+        self, t: torch.Tensor, u: torch.Tensor, params: dict
+    ) -> torch.Tensor:
+        S, E, I, R = u[..., 0], u[..., 1], u[..., 2], u[..., 3]
+        beta: float = params['beta']
+        sigma: float = params['sigma']  # rate of progression from E to I
+        gamma: float = params['gamma']
+        dS_dt = -beta * S * I
+        dE_dt = beta * S * I - sigma * E
+        dI_dt = sigma * E - gamma * I
+        dR_dt = gamma * I
+        return torch.stack([dS_dt, dE_dt, dI_dt, dR_dt], dim=-1)
+
+
+class SIModel(CompartmentalModel):
+    """SI (Susceptible-Infected) epidemiological model (no recovery)."""
+
+    @property
+    def compartment_names(self) -> list[str]:
+        return ['S', 'I']
+
+    def get_derivatives(
+        self, t: torch.Tensor, u: torch.Tensor, params: dict
+    ) -> torch.Tensor:
+        S, I = u[..., 0], u[..., 1]
+        beta: float = params['beta']
+        dS_dt = -beta * S * I
+        dI_dt = beta * S * I
+        return torch.stack([dS_dt, dI_dt], dim=-1)

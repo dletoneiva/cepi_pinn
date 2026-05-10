@@ -1,33 +1,33 @@
 """Run compartmental model simulations from configuration files."""
 
-import argparse
+import sys
 import hydra
 from omegaconf import DictConfig
 from pinn_epi.configs.model_loader import run_simulation_from_config
 
 
-def main_cli():
-    """Command line interface to run simulation with specified config file."""
-    parser = argparse.ArgumentParser(description="Run compartmental model simulation")
-    parser.add_argument(
-        "config_name", 
-        help="Name of the configuration file (without .yaml extension)",
-        default="sir_base",
-        nargs="?"
-    )
-    args = parser.parse_args()
-    
-    # Run the Hydra main function with the specified config
-    _run_with_config(args.config_name)
+def get_config_name():
+    """Get config name from command line arguments."""
+    # Check if a config name was provided as a command line argument
+    if len(sys.argv) > 1:
+        # If it's not a hydra override (doesn't start with + or ~), treat it as config name
+        first_arg = sys.argv[1]
+        if not first_arg.startswith(('+', '~', 'hydra/', 'experiment=', 'model=', 'simulation=', 'plotting=')):
+            return first_arg
+    # Default to sir_base if no config name provided
+    return "sir_base"
 
 
-@hydra.main(version_base=None, config_path="../../configs", config_name="sir_base")
-def _run_with_config(cfg: DictConfig, config_name: str = "sir_base") -> None:
+# Get the config name before Hydra initialization
+config_name = get_config_name()
+
+
+@hydra.main(version_base=None, config_path="../../configs", config_name=config_name)
+def main(cfg: DictConfig) -> None:
     """Run simulation based on Hydra configuration.
     
     Args:
         cfg: Hydra configuration object
-        config_name: Name of the configuration file
     """
     # Convert OmegaConf to regular dict
     config_dict = hydra.utils.instantiate(cfg, _convert_="dict")
@@ -44,4 +44,4 @@ def _run_with_config(cfg: DictConfig, config_name: str = "sir_base") -> None:
 
 
 if __name__ == "__main__":
-    main_cli()
+    main()

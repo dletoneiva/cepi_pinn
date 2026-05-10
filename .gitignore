@@ -1,5 +1,4 @@
 .aider*
 .local*
 .ipython*
-.pinn_epi/figures/*
-.pinn_epi/data/*
+./figures/*

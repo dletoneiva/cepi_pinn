@@ -13,6 +13,7 @@ Each model will:
 
 import os
 import numpy as np
+import datetime
 
 from pinn_epi.models.physics import SIRModel, SEIRModel, SIModel
 from pinn_epi.analysis.plotting import (
@@ -32,7 +33,8 @@ apply_nature_style()
 
 def fig_path(name: str) -> str:
     """Return the full save path for a figure inside FIGURES_DIR."""
-    return os.path.join(FIGURES_DIR, name)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(FIGURES_DIR, f"{timestamp}_{name.replace('.', '_')}")
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +54,7 @@ def sanity_check_sir() -> None:
         y0=y0,
         params=params,
         title='SIR Model',
-        save_path=fig_path('sir_model_beta0.4_gamma0.1.png'),
+        save_path=fig_path('sir_model_beta04_gamma01.png'),
     )
 
     S, I, R = trajectories['S'], trajectories['I'], trajectories['R']
@@ -82,7 +84,7 @@ def sanity_check_seir() -> None:
         y0=y0,
         params=params,
         title='SEIR Model',
-        save_path=fig_path('seir_model_beta0.4_sigma0.2_gamma0.1.png'),
+        save_path=fig_path('seir_model_beta04_sigma02_gamma01.png'),
     )
 
     S, E, I, R = (trajectories[k] for k in ['S', 'E', 'I', 'R'])
@@ -112,7 +114,7 @@ def sanity_check_si() -> None:
         y0=y0,
         params=params,
         title='SI Model',
-        save_path=fig_path('si_model_beta0.3.png'),
+        save_path=fig_path('si_model_beta03.png'),
     )
 
     S, I = trajectories['S'], trajectories['I']

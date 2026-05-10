@@ -7,6 +7,7 @@ compute gradients or run optimisation themselves.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
+import datetime
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -23,14 +24,14 @@ if TYPE_CHECKING:
 NATURE_STYLE: dict = {
     'font.family': 'sans-serif',
     'font.sans-serif': ['Arial', 'Helvetica', 'DejaVu Sans'],
-    'font.size': 16,
-    'axes.labelsize': 16,
-    'axes.titlesize': 16,
+    'font.size': 18,
+    'axes.labelsize': 20,
+    'axes.titlesize': 22,
     'axes.spines.top': True,
     'axes.spines.right': True,
-    'xtick.labelsize': 14,
-    'ytick.labelsize': 14,
-    'legend.fontsize': 16,
+    'xtick.labelsize': 18,
+    'ytick.labelsize': 18,
+    'legend.fontsize': 18,
     'figure.dpi': 100,
 }
 
@@ -135,7 +136,7 @@ def plot_compartmental_solution(
     # --- plotting ---
     created_fig = ax is None
     if created_fig:
-        fig, ax = plt.subplots(figsize=(10, 5))
+        fig, ax = plt.subplots(figsize=(12, 8))
     else:
         fig = ax.get_figure()
 
@@ -150,20 +151,21 @@ def plot_compartmental_solution(
     ax.set_xlabel('Time (days)')
     ax.set_ylabel('Fraction of Population')
     if title:
-        ax.set_title(title)
+        ax.set_title(title, pad=60)  # Add padding to avoid overlap with legend
 
     # Add model information as text below the figure
     param_str = ", ".join([f"{k}={v}" for k, v in params.items()])
     y0_str = ", ".join([f"{name}(0)={y0[i]:.2f}" for i, name in enumerate(compartment_names)])
     info_text = f"Parameters: {param_str} | Initial: {y0_str}"
     
-    fig.text(0.5, 0.02, info_text, ha='center', fontsize=12,
+    fig.text(0.5, 0.02, info_text, ha='center', fontsize=16,
              bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
     if created_fig:
-        # Add legend above the plot
-        legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.08), ncol=len(compartment_names))
-        plt.tight_layout()
+        # Add legend above the plot with proper spacing
+        legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.15), ncol=len(compartment_names), 
+                          columnspacing=1.5, handletextpad=0.5)
+        plt.tight_layout(rect=[0, 0.08, 1, 0.92])  # Adjust margins to avoid overlap
 
     if save_path:
         fig.savefig(save_path, bbox_inches='tight')

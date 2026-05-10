@@ -1,0 +1,23 @@
+# SEIR Model Configuration
+experiment:
+  name: "seir_model_experiment"
+  plot_results: true
+  save_figures: true
+  figures_dir: "figures"
+
+model:
+  type: "SEIRModel"
+  parameters:
+    beta: 0.4
+    sigma: 0.2
+    gamma: 0.1
+
+simulation:
+  t_span: [0, 60]
+  y0: [0.99, 0.00, 0.01, 0.0]
+  t_eval_points: 300
+
+plotting:
+  title: "SEIR Model Simulation"
+  resolution: "medium"  # low, medium, high
+  show_plot: false

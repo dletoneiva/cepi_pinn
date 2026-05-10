@@ -1,0 +1,21 @@
+# SI Model Configuration
+experiment:
+  name: "si_model_experiment"
+  plot_results: true
+  save_figures: true
+  figures_dir: "figures"
+
+model:
+  type: "SIModel"
+  parameters:
+    beta: 0.3
+
+simulation:
+  t_span: [0, 60]
+  y0: [0.99, 0.01]
+  t_eval_points: 300
+
+plotting:
+  title: "SI Model Simulation"
+  resolution: "medium"  # low, medium, high
+  show_plot: false

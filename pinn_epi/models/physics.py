@@ -16,6 +16,15 @@ class CompartmentalModel(abc.ABC):
         """Return ordered list of compartment names, e.g. ['S', 'I', 'R']."""
         pass
 
+    @property
+    def should_conserve(self) -> bool:
+        """Return whether this model should conserve total population.
+        
+        Defaults to True. Override in subclasses to return False for models
+        that don't conserve total population (e.g., models with births/deaths).
+        """
+        return True
+
     @abc.abstractmethod
     def get_derivatives(
         self, t: torch.Tensor, u: torch.Tensor, params: dict

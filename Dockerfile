@@ -35,6 +35,15 @@ RUN pip3 install --no-cache-dir \
 # Cria o diretório de trabalho
 WORKDIR /app
 
+# Adiciona o diretório atual ao PYTHONPATH
+ENV PYTHONPATH=/app:$PYTHONPATH
+
+# Copia os arquivos do projeto
+COPY . /app
+
+# Instala o pacote em modo editável
+RUN pip3 install -e .
+
 # Expondo a porta para o Jupyter Lab (opcional)
 EXPOSE 8888
 

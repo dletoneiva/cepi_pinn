@@ -168,11 +168,11 @@ def plot_compartmental_solution(
     if title:
         ax.set_title(title, pad=60)  # Add padding to avoid overlap with legend
 
-    if created_fig:
-        # Add legend above the plot with proper spacing
-        legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
-                          columnspacing=1.5, handletextpad=0.5)
-        plt.subplots_adjust(left=0.1, right=0.95, top=0.85, bottom=0.25)
+    # Add legend above the plot with proper spacing
+    legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
+                      columnspacing=1.5, handletextpad=0.5)
+    # Use subplots_adjust for consistent spacing
+    plt.subplots_adjust(left=0.1, right=0.95, top=0.85, bottom=0.25)
 
     # Add model information as text below the figure with line wrapping
     param_str = ", ".join([f"{k}={v}" for k, v in params.items()])

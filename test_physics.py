@@ -45,7 +45,7 @@ def sanity_check_sir() -> None:
     print("\n--- SIR Model ---")
     model = SIRModel()
     t_span = [0, 60]
-    y0 = [0.99, 0.01, 0.00]
+    y0 = [0.8, 0.2, 0.00]
     params = {'beta': 0.4, 'gamma': 0.1}
 
     fig, ax, trajectories = plot_compartmental_solution(
@@ -75,7 +75,7 @@ def sanity_check_seir() -> None:
     print("\n--- SEIR Model ---")
     model = SEIRModel()
     t_span = [0, 60]
-    y0 = [0.99, 0.00, 0.01, 0.00]  # S, E, I, R
+    y0 = [0.8, 0.19, 0.01, 0.00]  # S, E, I, R
     params = {'beta': 0.4, 'sigma': 0.2, 'gamma': 0.1}
 
     fig, ax, trajectories = plot_compartmental_solution(
@@ -105,7 +105,7 @@ def sanity_check_si() -> None:
     print("\n--- SI Model ---")
     model = SIModel()
     t_span = [0, 60]
-    y0 = [0.99, 0.01]  # S, I
+    y0 = [0.8, 0.2]  # S, I
     params = {'beta': 0.3}
 
     fig, ax, trajectories = plot_compartmental_solution(

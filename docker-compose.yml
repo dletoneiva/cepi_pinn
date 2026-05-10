@@ -1,46 +1,28 @@
-
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
     image: phys-sir-env
-    # Define o diretório de trabalho dentro do contentor
     working_dir: /app
-    # Mapeia a pasta atual no WSL para a pasta /app no Docker
     volumes:
       - .:/app
-    # Mantém o contentor aberto para comandos interativos (equivalente ao -it)
-    ports:
-      - "8888:8888"
-
     environment:
       - HOME=/app
       - XDG_CACHE_HOME=/app/.cache
       - XDG_CONFIG_HOME=/app/.config
-      
-    tty: true
-    stdin_open: true
-    # Configuração crucial para aceder aos núcleos CUDA da NVIDIA
+    tty: true           # Garante o suporte ao modo interativo
+    stdin_open: true    # Garante o suporte ao modo interativo
     deploy:
       resources:
         limits:
           memory: 10G
-        # reservations:
-        #   devices:
-        #     - driver: nvidia
-        #       count: all
-        #       capabilities: [gpu]
-
-    command: >
-      jupyter lab 
-      --ip=0.0.0.0 
-      --port=8888 
-      --no-browser 
-      --allow-root 
-      --ServerApp.token='token_jupyter'
-      >
-      sleep infinity
-      
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Comando padrão vazio ou simples, já que você vai passar o script via CLI
+    command: python3
     user: "1000:1000"
-  

@@ -149,19 +149,20 @@ def plot_compartmental_solution(
 
     ax.set_xlabel('Time (days)')
     ax.set_ylabel('Fraction of Population')
-    ax.legend(frameon=True)
     if title:
         ax.set_title(title)
 
-    # Add model information as text box
+    # Add model information as text below the figure
     param_str = ", ".join([f"{k}={v}" for k, v in params.items()])
     y0_str = ", ".join([f"{name}(0)={y0[i]:.2f}" for i, name in enumerate(compartment_names)])
-    info_text = f"Parameters: {param_str}\nInitial: {y0_str}"
+    info_text = f"Parameters: {param_str} | Initial: {y0_str}"
     
-    ax.text(0.02, 0.98, info_text, transform=ax.transAxes, fontsize=12,
-            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    fig.text(0.5, 0.02, info_text, ha='center', fontsize=12,
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
     if created_fig:
+        # Add legend above the plot
+        legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.08), ncol=len(compartment_names))
         plt.tight_layout()
 
     if save_path:

@@ -1,0 +1,21 @@
+defaults:
+  - compartmental: sir
+  - _self_
+
+experiment:
+  name: "compartmental_simulation"
+  plot_results: true
+  save_figures: true
+  figures_dir: "./figures"
+
+simulation:
+  t_span: [0, 50]
+  y0: [0.99, 0.01, 0.0]
+  t_eval_points: 1000
+
+plotting:
+  title: "Compartmental Model Simulation"
+  resolution: "medium"
+  show_plot: true
+
+output_dir: "./outputs"

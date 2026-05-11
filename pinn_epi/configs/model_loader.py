@@ -4,6 +4,7 @@ from typing import Dict, Any, Union
 import numpy as np
 import os
 from datetime import datetime
+from omegaconf import DictConfig, OmegaConf
 
 from pinn_epi.models.physics import CompartmentalModel, SIRModel, SEIRModel, SIModel
 from pinn_epi.analysis.plotting import plot_compartmental_solution
@@ -76,26 +77,32 @@ def create_model_from_config(config: Dict[str, Any]) -> CompartmentalModel:
     return model_class()
 
 
-def run_simulation_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
+def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     """Run a simulation based on the provided configuration.
     
     Args:
-        config: Configuration dictionary
+        config: Configuration dictionary from Hydra
         
     Returns:
         Dictionary containing the model, trajectories, and figure path (if saved)
     """
+    # Convert DictConfig to regular dict for compatibility
+    if hasattr(config, '__dict__'):
+        config_dict = OmegaConf.to_container(config, resolve=True)
+    else:
+        config_dict = config
+    
     # Validate configuration
-    validate_model_config(config)
+    validate_model_config(config_dict)
     
     # Create model
-    model = create_model_from_config(config)
+    model = create_model_from_config(config_dict)
     
     # Extract simulation parameters
-    t_span = config["simulation"]["t_span"]
-    y0 = config["simulation"]["y0"]
-    params = config["model"]["parameters"]
-    t_eval_points = config["simulation"]["t_eval_points"]
+    t_span = config_dict["simulation"]["t_span"]
+    y0 = config_dict["simulation"]["y0"]
+    params = config_dict["model"]["parameters"]
+    t_eval_points = config_dict["simulation"]["t_eval_points"]
     
     # Create t_eval
     t_eval = np.linspace(t_span[0], t_span[1], t_eval_points)
@@ -113,9 +120,9 @@ def run_simulation_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
     fig, ax = plot_compartmental_solution(
         t=t_eval,
         trajectories=trajectories,
-        title=config["plotting"]["title"],
-        resolution=config["plotting"]["resolution"],
-        show=config["plotting"]["show_plot"],
+        title=config_dict["plotting"]["title"],
+        resolution=config_dict["plotting"]["resolution"],
+        show=config_dict["plotting"]["show_plot"],
         model_params=params,
         initial_conditions=y0,
     )
@@ -125,16 +132,17 @@ def run_simulation_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "model": model,
         "trajectories": trajectories,
         "figure": fig,
-        "axes": ax
+        "axes": ax,
+        "t": t_eval
     }
     
-    if config["experiment"]["save_figures"]:
-        figures_dir = config["experiment"]["figures_dir"]
+    if config_dict["experiment"]["save_figures"]:
+        figures_dir = config_dict["experiment"]["figures_dir"]
         os.makedirs(figures_dir, exist_ok=True)
         
         # Create filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_type = config["model"]["type"]
+        model_type = config_dict["model"]["type"]
         filename = f"{timestamp}_{model_type.lower()}_simulation.png"
         filepath = os.path.join(figures_dir, filename)
         
@@ -143,7 +151,7 @@ def run_simulation_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
         print(f"Figure saved to: {filepath}")
     
     # Show plot if requested
-    if config["experiment"]["plot_results"]:
+    if config_dict["experiment"]["plot_results"]:
         import matplotlib.pyplot as plt
         plt.show()
     

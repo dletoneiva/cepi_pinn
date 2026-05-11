@@ -1,0 +1,5 @@
+# @package _global_
+model:
+  type: "SIModel"
+  parameters:
+    beta: 0.3

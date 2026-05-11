@@ -1,0 +1,8 @@
+defaults:
+  - base
+  - compartmental: si
+  - _self_
+
+simulation:
+  t_span: [0, 50]
+  y0: [0.99, 0.01]

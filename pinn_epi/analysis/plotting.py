@@ -68,6 +68,8 @@ def plot_compartmental_solution(
     show: bool = False,
     save_path: Optional[str] = None,
     resolution: str = 'medium',
+    model_params: Optional[dict] = None,
+    initial_conditions: Optional[list] = None,
 ) -> tuple[plt.Figure, plt.Axes]:
     """Plot the ODE system solution for any CompartmentalModel.
 
@@ -84,6 +86,8 @@ def plot_compartmental_solution(
         save_path: Optional file path to save the figure (e.g.
             'figures/sir_sanity.png').  Directory must exist.
         resolution: Figure resolution level ('low'=300, 'medium'=600, 'high'=1200).
+        model_params: Optional dictionary of model parameters for display.
+        initial_conditions: Optional list of initial conditions for display.
 
     Returns:
         (fig, ax) where fig is the matplotlib Figure and ax is the Axes.
@@ -126,25 +130,27 @@ def plot_compartmental_solution(
         plt.subplots_adjust(left=0.1, right=0.95, top=0.8, bottom=0.25)
 
     # Add model information as text below the figure with line wrapping
-    param_str = ", ".join([f"{k}={v}" for k, v in params.items()])
-    y0_str = ", ".join([f"{name}(0)={y0[i]:.2f}" for i, name in enumerate(compartment_names)])
-    info_text = f"Parameters: {param_str} | Initial: {y0_str}"
-    
-    # Wrap text to fit within figure width
-    wrapped_text = textwrap.fill(info_text, width=80)
-    
-    # Count lines in wrapped text
-    lines = wrapped_text.count('\n') + 1
-    
-    # Adjust font size if text exceeds 2 lines
-    font_size = 16
-    if lines > 2:
-        font_size = max(10, 16 - (lines - 2) * 2)  # Reduce font size but keep minimum of 10
-    
-    # Position text just below the x-axis label using axes coordinates
-    ax.text(0.5, -0.25, wrapped_text, ha='center', va='top', fontsize=font_size,
-            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
-            transform=ax.transAxes)
+    # Only add info text if model_params and initial_conditions are provided
+    if model_params is not None and initial_conditions is not None:
+        param_str = ", ".join([f"{k}={v}" for k, v in model_params.items()])
+        y0_str = ", ".join([f"{name}(0)={initial_conditions[i]:.2f}" for i, name in enumerate(compartment_names)])
+        info_text = f"Parameters: {param_str} | Initial: {y0_str}"
+        
+        # Wrap text to fit within figure width
+        wrapped_text = textwrap.fill(info_text, width=80)
+        
+        # Count lines in wrapped text
+        lines = wrapped_text.count('\n') + 1
+        
+        # Adjust font size if text exceeds 2 lines
+        font_size = 16
+        if lines > 2:
+            font_size = max(10, 16 - (lines - 2) * 2)  # Reduce font size but keep minimum of 10
+        
+        # Position text just below the x-axis label using axes coordinates
+        ax.text(0.5, -0.25, wrapped_text, ha='center', va='top', fontsize=font_size,
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+                transform=ax.transAxes)
 
     if save_path:
         fig.savefig(save_path, bbox_inches='tight', dpi=dpi_value)

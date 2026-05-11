@@ -115,7 +115,9 @@ def run_simulation_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
         trajectories=trajectories,
         title=config["plotting"]["title"],
         resolution=config["plotting"]["resolution"],
-        show=config["plotting"]["show_plot"]
+        show=config["plotting"]["show_plot"],
+        model_params=params,
+        initial_conditions=y0,
     )
     
     # Handle saving

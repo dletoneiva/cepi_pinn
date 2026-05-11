@@ -63,6 +63,8 @@ def sanity_check_sir() -> None:
         trajectories=trajectories,
         title='SIR Model',
         save_path=fig_path('sir_model_beta04_gamma01.png'),
+        model_params=params,
+        initial_conditions=y0,
     )
 
     S, I, R = trajectories['S'], trajectories['I'], trajectories['R']
@@ -100,6 +102,8 @@ def sanity_check_seir() -> None:
         trajectories=trajectories,
         title='SEIR Model',
         save_path=fig_path('seir_model_beta04_sigma02_gamma01.png'),
+        model_params=params,
+        initial_conditions=y0,
     )
 
     S, E, I, R = (trajectories[k] for k in ['S', 'E', 'I', 'R'])
@@ -137,6 +141,8 @@ def sanity_check_si() -> None:
         trajectories=trajectories,
         title='SI Model',
         save_path=fig_path('si_model_beta03.png'),
+        model_params=params,
+        initial_conditions=y0,
     )
 
     S, I = trajectories['S'], trajectories['I']

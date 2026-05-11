@@ -1,5 +1,6 @@
 """Mathematical analysis tools for PINN models."""
 
+from typing import Optional
 import numpy as np
 from scipy.integrate import solve_ivp
 import torch

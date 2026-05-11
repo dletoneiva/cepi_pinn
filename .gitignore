@@ -1,9 +1,7 @@
 .aider*
 .local*
 .ipython*
-./figures/*
-./configs/*
-./unity_tests/*
+figures/*
 lista.md
-./outputs/*
+outputs/*
 nature_paper_with_storytelling_20260224.py

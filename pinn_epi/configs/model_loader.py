@@ -29,16 +29,18 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         ValueError: If configuration is invalid
         KeyError: If required keys are missing
     """
+    # Check if model section exists
+    if "model" not in config:
+        raise KeyError("Missing required configuration section: model")
+    
     # Check if model type exists
-    model_type = config["model"]["type"]
+    model_section = config["model"]
+    if "type" not in model_section:
+        raise KeyError("Missing required model key: type")
+    
+    model_type = model_section["type"]
     if model_type not in MODEL_REGISTRY:
         raise ValueError(f"Unknown model type: {model_type}. Available models: {list(MODEL_REGISTRY.keys())}")
-    
-    # Check if required keys exist
-    required_keys = ["model", "simulation"]
-    for key in required_keys:
-        if key not in config:
-            raise KeyError(f"Missing required configuration section: {key}")
     
     # Check model section
     model_keys = ["type", "parameters", "initial_conditions", "output_size"]
@@ -113,10 +115,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         Dictionary containing the model, trajectories, and figure path (if saved)
     """
     # Convert DictConfig to regular dict for compatibility
-    if hasattr(config, '__dict__'):
-        config_dict = OmegaConf.to_container(config, resolve=True)
-    else:
-        config_dict = config
+    config_dict = OmegaConf.to_container(config, resolve=True)
     
     # Validate configuration
     validate_model_config(config_dict)

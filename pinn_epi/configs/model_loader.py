@@ -35,7 +35,7 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         raise ValueError(f"Unknown model type: {model_type}. Available models: {list(MODEL_REGISTRY.keys())}")
     
     # Check if required keys exist
-    required_keys = ["model", "simulation", "plotting"]
+    required_keys = ["model", "simulation"]
     for key in required_keys:
         if key not in config:
             raise KeyError(f"Missing required configuration section: {key}")
@@ -45,12 +45,6 @@ def validate_model_config(config: Dict[str, Any]) -> None:
     for key in model_keys:
         if key not in config["model"]:
             raise KeyError(f"Missing required model key: {key}")
-    
-    # Check simulation section
-    sim_keys = ["t_span", "t_eval_points"]
-    for key in sim_keys:
-        if key not in config["simulation"]:
-            raise KeyError(f"Missing required simulation key: {key}")
 
 
 def create_model_from_config(config: Dict[str, Any]) -> CompartmentalModel:
@@ -71,6 +65,42 @@ def create_model_from_config(config: Dict[str, Any]) -> CompartmentalModel:
     
     model_class = MODEL_REGISTRY[model_type]
     return model_class()
+
+
+def get_model_parameters(config: Dict[str, Any]) -> Dict[str, float]:
+    """Extract model parameters from configuration.
+    
+    Args:
+        config: Configuration dictionary
+        
+    Returns:
+        Dictionary of model parameters
+    """
+    return config.get('model', {}).get('parameters', {})
+
+
+def get_initial_conditions(config: Dict[str, Any]) -> list:
+    """Extract initial conditions from configuration.
+    
+    Args:
+        config: Configuration dictionary
+        
+    Returns:
+        List of initial conditions
+    """
+    return config.get('model', {}).get('initial_conditions', [])
+
+
+def get_output_size(config: Dict[str, Any]) -> int:
+    """Extract output size from configuration.
+    
+    Args:
+        config: Configuration dictionary
+        
+    Returns:
+        Output size (number of compartments)
+    """
+    return config.get('model', {}).get('output_size', 0)
 
 
 def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
@@ -112,43 +142,24 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         t_eval=t_eval,
     )
     
-    # Plot solution
-    fig, ax = plot_compartmental_solution(
-        t=t_eval,
-        trajectories=trajectories,
-        title=config_dict["plotting"]["title"],
-        resolution=config_dict["plotting"]["resolution"],
-        show=config_dict["plotting"]["show_plot"],
-        model_params=params,
-        initial_conditions=y0,
-    )
-    
-    # Handle saving
+    # Plot solution if requested
     result = {
         "model": model,
         "trajectories": trajectories,
-        "figure": fig,
-        "axes": ax,
         "t": t_eval
     }
     
-    if config_dict["experiment"]["save_figures"]:
-        figures_dir = config_dict["experiment"]["figures_dir"]
-        os.makedirs(figures_dir, exist_ok=True)
-        
-        # Create filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_type = config_dict["model"]["type"]
-        filename = f"{timestamp}_{model_type.lower()}_simulation.png"
-        filepath = os.path.join(figures_dir, filename)
-        
-        fig.savefig(filepath, bbox_inches='tight')
-        result["figure_path"] = filepath
-        print(f"Figure saved to: {filepath}")
-    
-    # Show plot if requested
-    if config_dict["experiment"]["plot_results"]:
-        import matplotlib.pyplot as plt
-        plt.show()
+    if config_dict.get("plotting", {}).get("show_plot", True):
+        fig, ax = plot_compartmental_solution(
+            t=t_eval,
+            trajectories=trajectories,
+            title=config_dict.get("plotting", {}).get("title", "Compartmental Model Simulation"),
+            resolution=config_dict.get("plotting", {}).get("resolution", "low"),
+            show=config_dict.get("plotting", {}).get("show_plot", True),
+            model_params=params,
+            initial_conditions=y0,
+        )
+        result["figure"] = fig
+        result["axes"] = ax
     
     return result

@@ -2,8 +2,8 @@
 
 from typing import Optional
 import numpy as np
-from scipy.integrate import solve_ivp
 import torch
+from torchdiffeq import odeint
 from pinn_epi.models.physics import CompartmentalModel
 
 
@@ -13,9 +13,10 @@ def solve_compartmental_model(
     y0: list[float],
     params: dict,
     t_eval: Optional[np.ndarray] = None,
-    **solve_ivp_kwargs,
+    method: str = 'rk4',
+    **odeint_kwargs,
 ) -> dict[str, np.ndarray]:
-    """Solve the ODE system defined by any CompartmentalModel.
+    """Solve the ODE system defined by any CompartmentalModel using torchdiffeq.
 
     This function is intentionally generic: it reads the compartment names
     directly from the model so it works for SIR, SEIR, SI, or any future
@@ -29,8 +30,8 @@ def solve_compartmental_model(
         params: Parameter dict forwarded to model.get_derivatives.
         t_eval: Optional array of time points at which to store the solution.
             Defaults to 300 evenly-spaced points over t_span.
-        **solve_ivp_kwargs: Extra keyword arguments forwarded to
-            scipy.integrate.solve_ivp (e.g. method='RK45', rtol=1e-8).
+        method: Integration method for torchdiffeq.odeint (e.g., 'rk4', 'dopri5').
+        **odeint_kwargs: Extra keyword arguments forwarded to torchdiffeq.odeint.
 
     Returns:
         A dictionary mapping each compartment name to its solved numpy array.
@@ -47,27 +48,23 @@ def solve_compartmental_model(
             f"{n_compartments} compartments: {compartment_names}"
         )
 
-    # --- wrap model.get_derivatives for scipy ---
-    def ode_rhs(t: float, y: np.ndarray) -> np.ndarray:
-        u = torch.tensor(y, dtype=torch.float32)
-        t_t = torch.tensor(t, dtype=torch.float32)
-        du = model.get_derivatives(t_t, u, params)
-        return du.detach().numpy()
+    # Convert initial conditions and time points to torch tensors
+    y0_tensor = torch.tensor(y0, dtype=torch.float32)
+    t_eval_tensor = torch.tensor(t_eval, dtype=torch.float32)
 
-    sol = solve_ivp(
-        ode_rhs,
-        t_span,
-        y0,
-        t_eval=t_eval,
-        **solve_ivp_kwargs,
-    )
+    # --- wrap model.get_derivatives for torchdiffeq ---
+    def ode_rhs(t: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return model.get_derivatives(t, y, params)
 
-    if not sol.success:
-        raise RuntimeError(f"ODE solver failed: {sol.message}")
+    # Solve the ODE using torchdiffeq
+    sol = odeint(ode_rhs, y0_tensor, t_eval_tensor, method=method, **odeint_kwargs)
+
+    # Convert solution back to numpy arrays
+    sol_np = sol.detach().numpy()
 
     # --- build trajectories dict ---
     trajectories: dict[str, np.ndarray] = {
-        name: sol.y[i] for i, name in enumerate(compartment_names)
+        name: sol_np[:, i] for i, name in enumerate(compartment_names)
     }
 
     return trajectories

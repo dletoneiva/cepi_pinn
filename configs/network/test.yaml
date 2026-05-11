@@ -1,4 +1,5 @@
 network:
-  hidden_layers: [16, 16]
+  num_layers: 2
+  layer_size: 16
   activation: "tanh"
   dropout: 0.0

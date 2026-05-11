@@ -151,17 +151,33 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         "t": t_eval
     }
     
-    if config_dict.get("plotting", {}).get("show_plot", True):
+    # Handle plotting
+    plotting_config = config_dict.get("plotting", {})
+    if plotting_config.get("show_plot", True):
+        # Determine save path if saving is requested
+        save_path = None
+        if plotting_config.get("save_plot", False):
+            # Create output directory if it doesn't exist
+            output_dir = "outputs"
+            os.makedirs(output_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            model_type = config_dict["compartmental"]["model"]["type"]
+            save_path = f"{output_dir}/{model_type}_simulation_{timestamp}.png"
+        
         fig, ax = plot_compartmental_solution(
             t=t_eval,
             trajectories=trajectories,
-            title=config_dict.get("plotting", {}).get("title", "Compartmental Model Simulation"),
-            resolution=config_dict.get("plotting", {}).get("resolution", "low"),
-            show=config_dict.get("plotting", {}).get("show_plot", True),
+            title=plotting_config.get("title", "Compartmental Model Simulation"),
+            resolution=plotting_config.get("resolution", "low"),
+            show=plotting_config.get("show_plot", True),
+            save_path=save_path,
             model_params=params,
             initial_conditions=y0,
         )
         result["figure"] = fig
         result["axes"] = ax
+        
+        if save_path:
+            result["save_path"] = save_path
     
     return result

@@ -1,0 +1,4 @@
+network:
+  hidden_layers: [8, 8, 8, 8]
+  activation: "tanh"
+  dropout: 0.0

@@ -35,22 +35,18 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         raise ValueError(f"Unknown model type: {model_type}. Available models: {list(MODEL_REGISTRY.keys())}")
     
     # Check if required keys exist
-    required_keys = ["experiment", "model", "simulation", "plotting"]
+    required_keys = ["model", "simulation", "plotting"]
     for key in required_keys:
         if key not in config:
             raise KeyError(f"Missing required configuration section: {key}")
     
-    # Check experiment section
-    exp_keys = ["name", "plot_results", "save_figures", "figures_dir"]
-    for key in exp_keys:
-        if key not in config["experiment"]:
-            raise KeyError(f"Missing required experiment key: {key}")
-    
     # Check model section
-    if "parameters" not in config["model"]:
-        raise KeyError("Missing required model parameters")
+    model_keys = ["type", "parameters", "initial_conditions", "output_size"]
+    for key in model_keys:
+        if key not in config["model"]:
+            raise KeyError(f"Missing required model key: {key}")
     
-    # Check simulation section - update to match new structure
+    # Check simulation section
     sim_keys = ["t_span", "t_eval_points"]
     for key in sim_keys:
         if key not in config["simulation"]:

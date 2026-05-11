@@ -1,0 +1,9 @@
+training:
+  epochs: 500
+  batch_size: 32
+  learning_rate: 0.001
+  optimizer: "adam"
+  loss_weights:
+    data: 1.0
+    physics: 1.0
+    initial: 1.0

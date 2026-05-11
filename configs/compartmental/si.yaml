@@ -3,3 +3,4 @@ model:
   parameters:
     beta: 0.3
   initial_conditions: [0.99, 0.01]
+  output_size: 2

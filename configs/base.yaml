@@ -1,16 +1,8 @@
 defaults:
   - compartmental: sir
-  - network: sir
-  - training: sir
+  - network: test
+  - training: test
   - _self_
-
-experiment:
-  name: "compartmental_model_experiment"
-  plot_results: true
-  save_figures: true
-  figures_dir: "./figures"
-  seed: 42
-  device: "cpu"
 
 simulation:
   t_span: [0, 50]
@@ -20,3 +12,6 @@ plotting:
   title: "Compartmental Model Simulation"
   resolution: "medium"
   show_plot: true
+
+seed: 42
+device: "cpu"

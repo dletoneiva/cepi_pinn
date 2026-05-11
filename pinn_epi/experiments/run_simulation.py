@@ -13,6 +13,10 @@ def main(cfg: DictConfig) -> None:
     Args:
         cfg: Hydra configuration object
     """
+    # Debug: Print the configuration structure
+    print("Configuration structure:")
+    print(OmegaConf.to_yaml(cfg))
+    
     # Set random seed for reproducibility
     if hasattr(cfg, 'seed'):
         torch.manual_seed(cfg.seed)

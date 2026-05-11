@@ -4,4 +4,6 @@
 ./figures/*
 ./configs/*
 ./unity_tests/*
-.lista.md
+lista.md
+./outputs/*
+nature_paper_with_storytelling_20260224.py

@@ -1,8 +1,0 @@
-defaults:
-  - base
-  - compartmental: seir
-  - _self_
-
-simulation:
-  t_span: [0, 100]
-  y0: [0.99, 0.0, 0.01, 0.0]

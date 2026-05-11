@@ -29,6 +29,9 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         ValueError: If configuration is invalid
         KeyError: If required keys are missing
     """
+    # Debug: print the config structure
+    # print("Config structure:", config.keys())
+    
     # Check if model section exists
     if "model" not in config:
         raise KeyError("Missing required configuration section: model")
@@ -116,6 +119,9 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     """
     # Convert DictConfig to regular dict for compatibility
     config_dict = OmegaConf.to_container(config, resolve=True)
+    
+    # Debug: print the config structure
+    # print("Full config structure:", config_dict.keys())
     
     # Validate configuration
     validate_model_config(config_dict)

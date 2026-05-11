@@ -5,6 +5,7 @@ import numpy as np
 import os
 from datetime import datetime
 from omegaconf import DictConfig, OmegaConf
+import hydra
 
 from pinn_epi.models.physics import CompartmentalModel, SIRModel, SEIRModel, SIModel
 from pinn_epi.analysis.plotting import plot_compartmental_solution
@@ -157,12 +158,11 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         # Determine save path if saving is requested
         save_path = None
         if plotting_config.get("save_plot", False):
-            # Create output directory if it doesn't exist
-            output_dir = "outputs"
-            os.makedirs(output_dir, exist_ok=True)
+            # Use Hydra's output directory
+            hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             model_type = config_dict["compartmental"]["model"]["type"]
-            save_path = f"{output_dir}/{model_type}_simulation_{timestamp}.png"
+            save_path = f"{hydra_output_dir}/{model_type}_simulation_{timestamp}.png"
         
         fig, ax = plot_compartmental_solution(
             t=t_eval,

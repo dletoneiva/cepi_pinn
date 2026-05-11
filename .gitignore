@@ -4,4 +4,6 @@
 figures/*
 lista.md
 outputs/*
+.cache*
+.config*
 nature_paper_with_storytelling_20260224.py

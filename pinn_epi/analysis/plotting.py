@@ -36,12 +36,21 @@ NATURE_STYLE: dict = {
 }
 
 # Color-blind friendly palette
-COMPARTMENT_COLORS = {
-    'S': '#1f77b4',  # blue
-    'E': '#ff7f0e',  # orange
-    'I': '#d62728',  # red
-    'R': '#2ca02c',  # green
-}
+COMPARTMENT_COLORS = {                                                                
+   'S': '#377EB8',
+   'I': '#E41A1C',
+   'R': '#4DAF4A',
+   'E': '#984EA3',
+   'D': '#A65628',
+   'V': '#FF7F00',
+   'H': '#FFFF33',              
+   'C': '#F781BF',                  
+   'Q': '#999999',
+   'A': '#8DD3C7',             
+   'P': '#BEBADA',                                                                                                
+   'W': '#FDB462',
+   'B': '#B3DE69',
+ }                                 
 
 # Resolution levels
 RESOLUTION_LEVELS = {
@@ -53,11 +62,6 @@ RESOLUTION_LEVELS = {
 def apply_nature_style() -> None:
     """Apply Nature-journal-style matplotlib rcParams globally."""
     plt.rcParams.update(NATURE_STYLE)
-
-
-# ---------------------------------------------------------------------------
-# Generic compartmental model solution plotter
-# ---------------------------------------------------------------------------
 
 def plot_compartmental_solution(
     t: np.ndarray,
@@ -92,15 +96,12 @@ def plot_compartmental_solution(
     Returns:
         (fig, ax) where fig is the matplotlib Figure and ax is the Axes.
     """
-    import torch  # local import keeps plotting.py importable without torch
 
-    # Set resolution
     if resolution not in RESOLUTION_LEVELS:
         raise ValueError(f"Resolution must be one of {list(RESOLUTION_LEVELS.keys())}")
     dpi_value = RESOLUTION_LEVELS[resolution]
 
     compartment_names = list(trajectories.keys())
-    n_compartments = len(compartment_names)
 
     # --- plotting ---
     created_fig = ax is None

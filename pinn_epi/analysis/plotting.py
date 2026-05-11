@@ -6,16 +6,13 @@ compute gradients or run optimisation themselves.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 import datetime
 import textwrap
 
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import numpy as np
 
-if TYPE_CHECKING:
-    from pinn_epi.models.physics import CompartmentalModel
 
 # ---------------------------------------------------------------------------
 # Nature-style rcParams — apply once via apply_nature_style()

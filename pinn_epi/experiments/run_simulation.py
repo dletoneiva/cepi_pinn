@@ -13,10 +13,6 @@ def main(cfg: DictConfig) -> None:
     Args:
         cfg: Hydra configuration object
     """
-    # Debug: Print the configuration structure
-    print("Configuration structure:")
-    print(OmegaConf.to_yaml(cfg))
-    
     # Set random seed for reproducibility
     if hasattr(cfg, 'seed'):
         torch.manual_seed(cfg.seed)
@@ -26,9 +22,9 @@ def main(cfg: DictConfig) -> None:
     result = run_simulation_from_config(cfg)
     
     # Print summary
-    print(f"\nSimulation completed for {cfg.model.type}")
-    print(f"Model parameters: {OmegaConf.to_container(cfg.model.parameters, resolve=True)}")
-    print(f"Initial conditions: {cfg.model.initial_conditions}")
+    print(f"\nSimulation completed for {cfg.compartmental.model.type}")
+    print(f"Model parameters: {OmegaConf.to_container(cfg.compartmental.model.parameters, resolve=True)}")
+    print(f"Initial conditions: {cfg.compartmental.model.initial_conditions}")
 
 if __name__ == "__main__":
     main()

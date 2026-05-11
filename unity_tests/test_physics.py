@@ -20,6 +20,7 @@ from pinn_epi.analysis.plotting import (
     apply_nature_style,
     plot_compartmental_solution,
 )
+from pinn_epi.analysis.evaluator import solve_compartmental_model
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -47,12 +48,19 @@ def sanity_check_sir() -> None:
     t_span = [0, 60]
     y0 = [0.8, 0.2, 0.00]
     params = {'beta': 0.4, 'gamma': 0.1}
+    t_eval = np.linspace(t_span[0], t_span[1], 300)
 
-    fig, ax, trajectories = plot_compartmental_solution(
+    trajectories = solve_compartmental_model(
         model=model,
         t_span=t_span,
         y0=y0,
         params=params,
+        t_eval=t_eval,
+    )
+
+    fig, ax = plot_compartmental_solution(
+        t=t_eval,
+        trajectories=trajectories,
         title='SIR Model',
         save_path=fig_path('sir_model_beta04_gamma01.png'),
     )
@@ -77,12 +85,19 @@ def sanity_check_seir() -> None:
     t_span = [0, 60]
     y0 = [0.8, 0.19, 0.01, 0.00]  # S, E, I, R
     params = {'beta': 0.4, 'sigma': 0.2, 'gamma': 0.1}
+    t_eval = np.linspace(t_span[0], t_span[1], 300)
 
-    fig, ax, trajectories = plot_compartmental_solution(
+    trajectories = solve_compartmental_model(
         model=model,
         t_span=t_span,
         y0=y0,
         params=params,
+        t_eval=t_eval,
+    )
+
+    fig, ax = plot_compartmental_solution(
+        t=t_eval,
+        trajectories=trajectories,
         title='SEIR Model',
         save_path=fig_path('seir_model_beta04_sigma02_gamma01.png'),
     )
@@ -107,12 +122,19 @@ def sanity_check_si() -> None:
     t_span = [0, 60]
     y0 = [0.8, 0.2]  # S, I
     params = {'beta': 0.3}
+    t_eval = np.linspace(t_span[0], t_span[1], 300)
 
-    fig, ax, trajectories = plot_compartmental_solution(
+    trajectories = solve_compartmental_model(
         model=model,
         t_span=t_span,
         y0=y0,
         params=params,
+        t_eval=t_eval,
+    )
+
+    fig, ax = plot_compartmental_solution(
+        t=t_eval,
+        trajectories=trajectories,
         title='SI Model',
         save_path=fig_path('si_model_beta03.png'),
     )

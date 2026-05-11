@@ -7,6 +7,7 @@ from datetime import datetime
 
 from pinn_epi.models.physics import CompartmentalModel, SIRModel, SEIRModel, SIModel
 from pinn_epi.analysis.plotting import plot_compartmental_solution
+from pinn_epi.analysis.evaluator import solve_compartmental_model
 
 
 # Mapping of model names to classes
@@ -99,13 +100,19 @@ def run_simulation_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
     # Create t_eval
     t_eval = np.linspace(t_span[0], t_span[1], t_eval_points)
     
-    # Run simulation
-    fig, ax, trajectories = plot_compartmental_solution(
+    # Solve ODE
+    trajectories = solve_compartmental_model(
         model=model,
         t_span=t_span,
         y0=y0,
         params=params,
         t_eval=t_eval,
+    )
+    
+    # Plot solution
+    fig, ax = plot_compartmental_solution(
+        t=t_eval,
+        trajectories=trajectories,
         title=config["plotting"]["title"],
         resolution=config["plotting"]["resolution"],
         show=config["plotting"]["show_plot"]

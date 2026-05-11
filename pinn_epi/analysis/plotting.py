@@ -13,7 +13,6 @@ import textwrap
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
-from scipy.integrate import solve_ivp
 
 if TYPE_CHECKING:
     from pinn_epi.models.physics import CompartmentalModel
@@ -61,50 +60,33 @@ def apply_nature_style() -> None:
 # ---------------------------------------------------------------------------
 
 def plot_compartmental_solution(
-    model: "CompartmentalModel",
-    t_span: list[float],
-    y0: list[float],
-    params: dict,
-    t_eval: Optional[np.ndarray] = None,
+    t: np.ndarray,
+    trajectories: dict[str, np.ndarray],
     compartment_colors: Optional[dict[str, str]] = None,
     title: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
     show: bool = False,
     save_path: Optional[str] = None,
     resolution: str = 'medium',
-    **solve_ivp_kwargs,
-) -> tuple[plt.Figure, plt.Axes, dict[str, np.ndarray]]:
-    """Solve and plot the ODE system defined by any CompartmentalModel.
+) -> tuple[plt.Figure, plt.Axes]:
+    """Plot the ODE system solution for any CompartmentalModel.
 
-    This function is intentionally generic: it reads the compartment names
-    directly from the model so it works for SIR, SEIR, SI, or any future
-    model without modification.
+    This function is purely presentational and does not compute the solution.
 
     Args:
-        model: Any instance of CompartmentalModel (SIRModel, SEIRModel, ...).
-        t_span: [t_start, t_end] integration interval.
-        y0: Initial conditions, one value per compartment in the same order
-            as model.compartment_names.
-        params: Parameter dict forwarded to model.get_derivatives.
-        t_eval: Optional array of time points at which to store the solution.
-            Defaults to 300 evenly-spaced points over t_span.
-        compartment_colors: Optional mapping of compartment name to colour
-            string, e.g. {'S': 'blue', 'I': 'red', 'R': 'green'}.
+        t: Array of time points.
+        trajectories: Dictionary mapping each compartment name to its solved numpy array.
+        compartment_colors: Optional mapping of compartment name to colour string.
         title: Optional plot title.
-        ax: Optional existing Axes to draw on.  If None a new figure is
-            created.
+        ax: Optional existing Axes to draw on.  If None a new figure is created.
         show: Whether to call plt.show() at the end.  Defaults to False so
             the caller controls display.
         save_path: Optional file path to save the figure (e.g.
             'figures/sir_sanity.png').  Directory must exist.
         resolution: Figure resolution level ('low'=300, 'medium'=600, 'high'=1200).
-        **solve_ivp_kwargs: Extra keyword arguments forwarded to
-            scipy.integrate.solve_ivp (e.g. method='RK45', rtol=1e-8).
 
     Returns:
-        (fig, ax, trajectories) where trajectories is a dict mapping each
-        compartment name to its solved numpy array — ready for downstream
-        storage or further analysis.
+        (fig, ax) where fig is the matplotlib Figure and ax is the Axes.
     """
     import torch  # local import keeps plotting.py importable without torch
 
@@ -112,41 +94,9 @@ def plot_compartmental_solution(
     if resolution not in RESOLUTION_LEVELS:
         raise ValueError(f"Resolution must be one of {list(RESOLUTION_LEVELS.keys())}")
     dpi_value = RESOLUTION_LEVELS[resolution]
-    
-    if t_eval is None:
-        t_eval = np.linspace(t_span[0], t_span[1], 300)
 
-    compartment_names: list[str] = model.compartment_names
+    compartment_names = list(trajectories.keys())
     n_compartments = len(compartment_names)
-
-    if len(y0) != n_compartments:
-        raise ValueError(
-            f"y0 has {len(y0)} entries but model has "
-            f"{n_compartments} compartments: {compartment_names}"
-        )
-
-    # --- wrap model.get_derivatives for scipy ---
-    def ode_rhs(t: float, y: np.ndarray) -> np.ndarray:
-        u = torch.tensor(y, dtype=torch.float32)
-        t_t = torch.tensor(t, dtype=torch.float32)
-        du = model.get_derivatives(t_t, u, params)
-        return du.detach().numpy()
-
-    sol = solve_ivp(
-        ode_rhs,
-        t_span,
-        y0,
-        t_eval=t_eval,
-        **solve_ivp_kwargs,
-    )
-
-    if not sol.success:
-        raise RuntimeError(f"ODE solver failed: {sol.message}")
-
-    # --- build trajectories dict ---
-    trajectories: dict[str, np.ndarray] = {
-        name: sol.y[i] for i, name in enumerate(compartment_names)
-    }
 
     # --- plotting ---
     created_fig = ax is None
@@ -159,9 +109,9 @@ def plot_compartmental_solution(
     if compartment_colors is None:
         compartment_colors = COMPARTMENT_COLORS
 
-    for idx, name in enumerate(compartment_names):
-        color = compartment_colors.get(name, f'C{idx}')
-        ax.plot(sol.t, trajectories[name], label=f'{name}(t)', color=color, lw=2)
+    for name in compartment_names:
+        color = compartment_colors.get(name, f'C{compartment_names.index(name)}')
+        ax.plot(t, trajectories[name], label=f'{name}(t)', color=color, lw=2)
 
     ax.set_xlabel('Time (days)')
     ax.set_ylabel('Fraction of Population')
@@ -203,4 +153,4 @@ def plot_compartmental_solution(
     if show:
         plt.show()
 
-    return fig, ax, trajectories
+    return fig, ax

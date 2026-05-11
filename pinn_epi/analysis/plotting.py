@@ -115,15 +115,20 @@ def plot_compartmental_solution(
         color = compartment_colors.get(name, f'C{compartment_names.index(name)}')
         ax.plot(t, trajectories[name], label=f'{name}(t)', color=color, lw=2)
 
-    ax.set_xlabel('Time (days)')
-    ax.set_ylabel('Fraction of Population')
-    if title:
-        ax.set_title(title, pad=60)  # Add padding to avoid overlap with legend
+    ax.set_xlabel('Time (days)', fontsize=20)
+    ax.set_ylabel('Fraction of Population', fontsize=20)
+    
+    # Set title with model compartments if not provided
+    if title is None:
+        compartments = "".join(compartment_names)
+        title = f"{compartments} differential equation solutions"
+    
+    ax.set_title(title, pad=60, fontsize=22)
 
     if created_fig:
         # Add legend above the plot with proper spacing
         legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
-                          columnspacing=1.5, handletextpad=0.5)
+                          columnspacing=1.5, handletextpad=0.5, fontsize=18)
         # Use subplots_adjust instead of tight_layout for precise control
         plt.subplots_adjust(left=0.1, right=0.95, top=0.8, bottom=0.25)
 

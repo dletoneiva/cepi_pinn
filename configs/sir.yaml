@@ -1,0 +1,24 @@
+defaults:
+  - base
+  - _self_
+
+model:
+  type: "SIRModel"
+  compartments: ["S", "I", "R"]
+  parameters:
+    beta: 0.3
+    gamma: 0.1
+  initial_conditions: [0.99, 0.01, 0.0]
+
+simulation:
+  t_span: [0, 50]
+  t_eval_points: 1000
+
+network:
+  hidden_layers: [64, 64, 64]
+  activation: "tanh"
+
+training:
+  epochs: 1000
+  batch_size: 32
+  learning_rate: 0.001

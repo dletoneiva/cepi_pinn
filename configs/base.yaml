@@ -1,9 +1,4 @@
-# Base configuration class
-defaults:
-  - compartmental: sir
-  - _self_
-
-# Global settings
+# Base configuration
 seed: 42
 device: "cpu"
 output_dir: "./outputs"

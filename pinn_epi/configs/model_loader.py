@@ -179,5 +179,6 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         
         if save_path:
             result["save_path"] = save_path
+            print(f"Figure saved to: {save_path}")
     
     return result

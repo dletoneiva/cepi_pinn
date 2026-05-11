@@ -1,5 +1,1 @@
-# Base network configuration
-network:
-  hidden_layers: [64, 64, 64]
-  activation: "tanh"
-  dropout: 0.0
+# Empty base - specific networks will override

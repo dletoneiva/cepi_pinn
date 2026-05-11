@@ -1,34 +1,5 @@
 defaults:
-  - compartmental: sir
+  - /base@_here_
   - _self_
 
-experiment:
-  name: "compartmental_simulation"
-  plot_results: true
-  save_figures: true
-  figures_dir: "./figures"
-
-simulation:
-  t_span: [0, 50]
-  y0: [0.99, 0.01, 0.0]
-  t_eval_points: 1000
-
-plotting:
-  title: "Compartmental Model Simulation"
-  resolution: "medium"
-  show_plot: true
-
-training:
-  epochs: 1000
-  batch_size: 32
-  learning_rate: 0.001
-  optimizer: "adam"
-  loss_weights:
-    data: 1.0
-    physics: 1.0
-    initial: 1.0
-
-network:
-  hidden_layers: [64, 64, 64]
-  activation: "tanh"
-  dropout: 0.0
+# This inherits all configuration from base

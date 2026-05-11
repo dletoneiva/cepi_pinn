@@ -1,4 +1,22 @@
-# Base configuration
-seed: 42
-device: "cpu"
-output_dir: "./outputs"
+defaults:
+  - compartmental: sir
+  - network: sir
+  - training: sir
+  - _self_
+
+experiment:
+  name: "compartmental_model_experiment"
+  plot_results: true
+  save_figures: true
+  figures_dir: "./figures"
+  seed: 42
+  device: "cpu"
+
+simulation:
+  t_span: [0, 50]
+  t_eval_points: 1000
+
+plotting:
+  title: "Compartmental Model Simulation"
+  resolution: "medium"
+  show_plot: true

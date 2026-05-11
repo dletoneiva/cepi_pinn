@@ -1,6 +1,1 @@
-# Base compartmental model configuration
-model:
-  type: "SIRModel"
-  parameters:
-    beta: 0.3
-    gamma: 0.1
+# Empty base - specific models will override

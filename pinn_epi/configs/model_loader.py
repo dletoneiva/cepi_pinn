@@ -50,8 +50,8 @@ def validate_model_config(config: Dict[str, Any]) -> None:
     if "parameters" not in config["model"]:
         raise KeyError("Missing required model parameters")
     
-    # Check simulation section
-    sim_keys = ["t_span", "y0", "t_eval_points"]
+    # Check simulation section - update to match new structure
+    sim_keys = ["t_span", "t_eval_points"]
     for key in sim_keys:
         if key not in config["simulation"]:
             raise KeyError(f"Missing required simulation key: {key}")
@@ -100,7 +100,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     
     # Extract simulation parameters
     t_span = config_dict["simulation"]["t_span"]
-    y0 = config_dict["simulation"]["y0"]
+    y0 = config_dict["model"]["initial_conditions"]  # Get from model config
     params = config_dict["model"]["parameters"]
     t_eval_points = config_dict["simulation"]["t_eval_points"]
     

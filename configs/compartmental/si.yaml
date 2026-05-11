@@ -1,5 +1,5 @@
-# @package _global_
 model:
   type: "SIModel"
   parameters:
     beta: 0.3
+  initial_conditions: [0.99, 0.01]

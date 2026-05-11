@@ -29,15 +29,15 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         ValueError: If configuration is invalid
         KeyError: If required keys are missing
     """
-    # Debug: print the config structure
-    # print("Config structure:", config.keys())
+    # Check if compartmental section exists and contains model
+    if "compartmental" not in config:
+        raise KeyError("Missing required configuration section: compartmental")
     
-    # Check if model section exists
-    if "model" not in config:
-        raise KeyError("Missing required configuration section: model")
+    if "model" not in config["compartmental"]:
+        raise KeyError("Missing required configuration section: compartmental.model")
     
     # Check if model type exists
-    model_section = config["model"]
+    model_section = config["compartmental"]["model"]
     if "type" not in model_section:
         raise KeyError("Missing required model key: type")
     
@@ -48,7 +48,7 @@ def validate_model_config(config: Dict[str, Any]) -> None:
     # Check model section
     model_keys = ["type", "parameters", "initial_conditions", "output_size"]
     for key in model_keys:
-        if key not in config["model"]:
+        if key not in config["compartmental"]["model"]:
             raise KeyError(f"Missing required model key: {key}")
 
 
@@ -64,7 +64,7 @@ def create_model_from_config(config: Dict[str, Any]) -> CompartmentalModel:
     Raises:
         ValueError: If model type is unknown
     """
-    model_type = config["model"]["type"]
+    model_type = config["compartmental"]["model"]["type"]
     if model_type not in MODEL_REGISTRY:
         raise ValueError(f"Unknown model type: {model_type}")
     
@@ -81,7 +81,7 @@ def get_model_parameters(config: Dict[str, Any]) -> Dict[str, float]:
     Returns:
         Dictionary of model parameters
     """
-    return config.get('model', {}).get('parameters', {})
+    return config.get('compartmental', {}).get('model', {}).get('parameters', {})
 
 
 def get_initial_conditions(config: Dict[str, Any]) -> list:
@@ -93,7 +93,7 @@ def get_initial_conditions(config: Dict[str, Any]) -> list:
     Returns:
         List of initial conditions
     """
-    return config.get('model', {}).get('initial_conditions', [])
+    return config.get('compartmental', {}).get('model', {}).get('initial_conditions', [])
 
 
 def get_output_size(config: Dict[str, Any]) -> int:
@@ -105,7 +105,7 @@ def get_output_size(config: Dict[str, Any]) -> int:
     Returns:
         Output size (number of compartments)
     """
-    return config.get('model', {}).get('output_size', 0)
+    return config.get('compartmental', {}).get('model', {}).get('output_size', 0)
 
 
 def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
@@ -120,9 +120,6 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     # Convert DictConfig to regular dict for compatibility
     config_dict = OmegaConf.to_container(config, resolve=True)
     
-    # Debug: print the config structure
-    # print("Full config structure:", config_dict.keys())
-    
     # Validate configuration
     validate_model_config(config_dict)
     
@@ -131,8 +128,8 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     
     # Extract simulation parameters
     t_span = config_dict["simulation"]["t_span"]
-    y0 = config_dict["model"]["initial_conditions"]  # Get from model config
-    params = config_dict["model"]["parameters"]
+    y0 = config_dict["compartmental"]["model"]["initial_conditions"]  # Get from model config
+    params = config_dict["compartmental"]["model"]["parameters"]
     t_eval_points = config_dict["simulation"]["t_eval_points"]
     
     # Create t_eval

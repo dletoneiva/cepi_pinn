@@ -36,6 +36,19 @@ class BaseMLP(nn.Module):
         return self.network(x)
 
 
+class TimeNormalizationEncoder(nn.Module):
+    """Encoder that normalizes time inputs to [-1, 1]."""
+    
+    def __init__(self, t0: float, t1: float):
+        super().__init__()
+        self.t0 = t0
+        self.t1 = t1
+        
+    def forward(self, t: torch.Tensor) -> torch.Tensor:
+        # Normalize time to [-1, 1] to prevent Tanh saturation
+        return 2.0 * (t - self.t0) / (self.t1 - self.t0) - 1.0
+
+
 class HardICAnsatz(nn.Module):
     """Hard initial condition ansatz: u(t) = u0 + (t-t0) * NN(t)"""
     
@@ -46,9 +59,7 @@ class HardICAnsatz(nn.Module):
         self.t1 = t1
         
     def forward(self, t: torch.Tensor, raw_output: torch.Tensor) -> torch.Tensor:
-        # Normalize time to [-1, 1] to prevent Tanh saturation
-        t_norm = 2.0 * (t - self.t0) / (self.t1 - self.t0) - 1.0
-        # Apply the ansatz with normalized time
+        # Apply the ansatz
         phi = (t - self.t0)
         return self.u0 + phi * raw_output
 

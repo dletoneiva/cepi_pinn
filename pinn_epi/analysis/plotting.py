@@ -5,7 +5,7 @@ import datetime
 import textwrap
 import numpy as np
 import matplotlib.pyplot as plt
-from pinn_epi.constants import PLOT_STYLE, GREEK_LETTERS, COMPARTMENT_COLORS, RESOLUTION_LEVELS
+from pinn_epi.constants import PLOT_STYLE, GREEK_LETTERS, COMPARTMENT_COLORS
 
 
 def apply_plot_style() -> None:

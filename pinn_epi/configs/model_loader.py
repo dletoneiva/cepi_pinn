@@ -7,11 +7,15 @@ from datetime import datetime
 from omegaconf import DictConfig, OmegaConf
 import hydra
 import importlib
+import logging
 
 from pinn_epi.analysis.plotting import plot_compartmental_solution
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.data_wrangler import save_simulation_data
 from pinn_epi.constants import MODEL_REGISTRY
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 def get_model_class(model_type: str) -> type:
@@ -44,6 +48,8 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         ValueError: If configuration is invalid
         KeyError: If required keys are missing
     """
+    logger.debug("Validating model configuration")
+    
     # Check if compartmental section exists and contains model
     if "compartmental" not in config:
         raise KeyError("Missing required configuration section: compartmental")
@@ -65,6 +71,8 @@ def validate_model_config(config: Dict[str, Any]) -> None:
     for key in model_keys:
         if key not in config["compartmental"]["model"]:
             raise KeyError(f"Missing required model key: {key}")
+    
+    logger.debug(f"Model configuration validated successfully for {model_type}")
 
 
 def create_model_from_config(config: Dict[str, Any]) -> Any:
@@ -80,6 +88,7 @@ def create_model_from_config(config: Dict[str, Any]) -> Any:
         ValueError: If model type is unknown
     """
     model_type = config["compartmental"]["model"]["type"]
+    logger.info(f"Creating model instance for {model_type}")
     model_class = get_model_class(model_type)
     return model_class()
 
@@ -129,6 +138,8 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     Returns:
         Dictionary containing the model, trajectories, and figure path (if saved)
     """
+    logger.info("Starting simulation from configuration")
+    
     # Convert DictConfig to regular dict for compatibility
     config_dict = OmegaConf.to_container(config, resolve=True)
     
@@ -137,6 +148,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     
     # Create model
     model = create_model_from_config(config_dict)
+    logger.info(f"Created model: {type(model).__name__}")
     
     # Extract simulation parameters
     t_span = config_dict["simulation"]["t_span"]
@@ -144,10 +156,15 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     params = config_dict["compartmental"]["model"]["parameters"]
     t_eval_points = config_dict["simulation"]["t_eval_points"]
     
+    logger.info(f"Simulation parameters - t_span: {t_span}, t_eval_points: {t_eval_points}")
+    logger.info(f"Model parameters: {params}")
+    logger.info(f"Initial conditions: {y0}")
+    
     # Create t_eval
     t_eval = np.linspace(t_span[0], t_span[1], t_eval_points)
     
     # Solve ODE
+    logger.info("Solving ODE system")
     trajectories = solve_compartmental_model(
         model=model,
         t_span=t_span,
@@ -155,6 +172,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         params=params,
         t_eval=t_eval,
     )
+    logger.info("ODE system solved successfully")
     
     # Plot solution if requested
     result = {
@@ -168,6 +186,8 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     show_plot = plotting_config.get("show_plot", True)
     save_plot = plotting_config.get("save_plot", False)
     
+    logger.info(f"Plotting configuration - show_plot: {show_plot}, save_plot: {save_plot}")
+    
     # Determine save path if saving is requested
     save_path = None
     if save_plot:
@@ -179,6 +199,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         
         # Ensure the directory exists
         os.makedirs(hydra_output_dir, exist_ok=True)
+        logger.info(f"Figure will be saved to: {save_path}")
     
     # Generate title based on model compartments if not provided
     title = plotting_config.get("title")
@@ -202,11 +223,13 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     
     if save_path:
         result["save_path"] = save_path
-        print(f"Figure saved to: {save_path}")
+        logger.info(f"Figure saved to: {save_path}")
     
     # Handle data saving
     data_config = config_dict.get("data", {})
     save_data = data_config.get("save_data", True)
+    
+    logger.info(f"Data saving configuration - save_data: {save_data}")
     
     if save_data:
         # Use Hydra's output directory for data as well
@@ -218,6 +241,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         os.makedirs(hydra_output_dir, exist_ok=True)
         
         # Save simulation data
+        logger.info(f"Saving simulation data to: {hydra_output_dir}")
         save_simulation_data(
             trajectories=trajectories,
             model_params=params,
@@ -229,6 +253,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         )
         
         result["data_save_path"] = hydra_output_dir
-        print(f"Data saved to: {hydra_output_dir}")
+        logger.info(f"Data saved to: {hydra_output_dir}")
     
+    logger.info("Simulation run completed successfully")
     return result

@@ -57,8 +57,6 @@ class HardICAnsatz(nn.Module):
         self.register_buffer("u0", initial_conditions.clone().detach())
         self.t0 = t0
         self.t1 = t1
-        # Add time normalization encoder to prevent Tanh saturation
-        self.time_encoder = TimeNormalizationEncoder(t0, t1)
         
     def forward(self, t: torch.Tensor, raw_output: torch.Tensor) -> torch.Tensor:
         # Apply the ansatz
@@ -89,6 +87,8 @@ class ModularPINN(nn.Module):
         
         # Apply ansatz if present
         if self.ansatz:
-            raw_output = self.ansatz(t, raw_output)
+            output = self.ansatz(t, raw_output)
+        else:
+            output = raw_output
             
-        return raw_output
+        return output

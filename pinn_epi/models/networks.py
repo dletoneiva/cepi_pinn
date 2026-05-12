@@ -49,8 +49,8 @@ class TimeNormalizationEncoder(nn.Module):
         return 2.0 * (t - self.t0) / (self.t1 - self.t0) - 1.0
 
 
-class HardICAnsatz(nn.Module):
-    """Hard initial condition ansatz: u(t) = u0 + (t-t0) * NN(t)"""
+class HardICHead(nn.Module):
+    """Hard initial condition head: u(t) = u0 + (t-t0) * NN(t)"""
     
     def __init__(self, initial_conditions: torch.Tensor, t0: float, t1: float):
         super().__init__()
@@ -59,24 +59,24 @@ class HardICAnsatz(nn.Module):
         self.t1 = t1
         
     def forward(self, t: torch.Tensor, raw_output: torch.Tensor) -> torch.Tensor:
-        # Apply the ansatz
+        # Apply the head
         phi = (t - self.t0)
         return self.u0 + phi * raw_output
 
 
 class ModularPINN(nn.Module):
-    """Composable PINN architecture with encoder, backbone, and ansatz."""
+    """Composable PINN architecture with encoder, backbone, and head."""
     
     def __init__(
         self,
         backbone: nn.Module,
-        ansatz: Optional[nn.Module] = None,
+        head: Optional[nn.Module] = None,
         encoder: Optional[nn.Module] = None
     ):
         super().__init__()
         self.encoder = encoder
         self.backbone = backbone
-        self.ansatz = ansatz
+        self.head = head
         
     def forward(self, t: torch.Tensor) -> torch.Tensor:
         # Apply encoder if present
@@ -85,9 +85,9 @@ class ModularPINN(nn.Module):
         # Apply backbone
         raw_output = self.backbone(features)
         
-        # Apply ansatz if present
-        if self.ansatz:
-            output = self.ansatz(t, raw_output)
+        # Apply head if present
+        if self.head:
+            output = self.head(t, raw_output)
         else:
             output = raw_output
             

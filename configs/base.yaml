@@ -10,7 +10,6 @@ simulation:
 
 plotting:
   title: "Compartmental Model Simulation"
-  resolution: "medium"
   show_plot: true
   save_plot: true
 

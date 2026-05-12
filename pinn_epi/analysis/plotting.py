@@ -27,8 +27,8 @@ NATURE_STYLE: dict = {
     'axes.titlesize': 22,  # Axis titles (smaller)
     'axes.spines.top': True,
     'axes.spines.right': True,
-    'xtick.labelsize': 17,  # Tick labels (slightly bigger than base, smaller than axis labels)
-    'ytick.labelsize': 17,  # Tick labels (slightly bigger than base, smaller than axis labels)
+    'xtick.labelsize': 14,  # Tick labels (slightly smaller than base)
+    'ytick.labelsize': 14,  # Tick labels (slightly smaller than base)
     'legend.fontsize': 16,  # Legend (same as axis titles)
     'figure.titlesize': 24,  # Figure title (largest)
     'figure.dpi': 300,  # Default resolution

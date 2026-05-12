@@ -7,7 +7,7 @@ from datetime import datetime
 from omegaconf import DictConfig, OmegaConf
 import hydra
 
-from pinn_epi.models.physics import CompartmentalModel, SIRModel, SEIRModel, SIModel
+from pinn_epi.models.physics import CompartmentalModel, SIRModel, SEIRModel, SIModel, SISModel, SIRVModel, SIRDModel
 from pinn_epi.analysis.plotting import plot_compartmental_solution
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.data_wrangler import save_simulation_data
@@ -18,6 +18,9 @@ MODEL_REGISTRY = {
     "SIRModel": SIRModel,
     "SEIRModel": SEIRModel,
     "SIModel": SIModel,
+    "SISModel": SISModel,
+    "SIRVModel": SIRVModel,
+    "SIRDModel": SIRDModel,
 }
 
 

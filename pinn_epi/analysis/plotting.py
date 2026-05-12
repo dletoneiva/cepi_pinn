@@ -3,76 +3,14 @@ from __future__ import annotations
 from typing import Optional
 import datetime
 import textwrap
-
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+from pinn_epi.constants import PLOT_STYLE, GREEK_LETTERS, COMPARTMENT_COLORS, RESOLUTION_LEVELS
 
-PLOT_STYLE: dict = {
-    'font.family': 'sans-serif',
-    'font.sans-serif': ['Arial', 'Helvetica', 'DejaVu Sans'],
-    'font.size': 16,
-    'axes.labelsize': 18,
-    'axes.titlesize': 18,
-    'axes.spines.top': True,
-    'axes.spines.right': True,
-    'xtick.labelsize': 17,
-    'ytick.labelsize': 17,
-    'legend.fontsize': 16,
-    'figure.titlesize': 20,
-    'figure.dpi': 300,
-}
-
-GREEK_LETTERS: dict = {
-    'alpha': r'$\alpha$',
-    'beta': r'$\beta$',
-    'gamma': r'$\gamma$',
-    'delta': r'$\delta$',
-    'epsilon': r'$\epsilon$',
-    'zeta': r'$\zeta$',
-    'eta': r'$\eta$',
-    'theta': r'$\theta$',
-    'iota': r'$\iota$',
-    'kappa': r'$\kappa$',
-    'lambda': r'$\lambda$',
-    'mu': r'$\mu$',
-    'nu': r'$\nu$',
-    'xi': r'$\xi$',
-    'omicron': r'$\omicron$',
-    'pi': r'$\pi$',
-    'rho': r'$\rho$',
-    'sigma': r'$\sigma$',
-    'tau': r'$\tau$',
-    'upsilon': r'$\upsilon$',
-    'phi': r'$\phi$',
-    'chi': r'$\chi$',
-    'psi': r'$\psi$',
-    'omega': r'$\omega$',
-}
-
-COMPARTMENT_COLORS = {
-    'S': '#377EB8',
-    'I': '#E41A1C',
-    'R': '#4DAF4A',
-    'E': '#984EA3',
-    'D': '#A65628',
-    'V': '#FF7F00',
-    'H': '#FFFF33',
-    'C': '#F781BF',
-    'Q': '#999999',
-    'A': '#8DD3C7',
-    'P': '#BEBADA',
-    'W': '#FDB462',
-    'B': '#B3DE69',
-}
-
-RESOLUTION_LEVELS = {
-    'low': 300,
-    'medium': 600,
-    'high': 1200
-}
 
 def apply_plot_style() -> None:
     plt.rcParams.update(PLOT_STYLE)
+
 
 def plot_compartmental_solution(
     t: np.ndarray,

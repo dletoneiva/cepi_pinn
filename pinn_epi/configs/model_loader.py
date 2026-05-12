@@ -6,26 +6,32 @@ import os
 from datetime import datetime
 from omegaconf import DictConfig, OmegaConf
 import hydra
+import importlib
 
-from pinn_epi.models.physics import CompartmentalModel, SIRModel, SEIRModel, SIModel, SISModel, SIRVModel, SIRDModel, SIRDVModel, SEIRDModel, SEIRVModel, SEIRDVModel
 from pinn_epi.analysis.plotting import plot_compartmental_solution
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.data_wrangler import save_simulation_data
+from pinn_epi.constants import MODEL_REGISTRY
 
 
-# Mapping of model names to classes
-MODEL_REGISTRY = {
-    "SIRModel": SIRModel,
-    "SEIRModel": SEIRModel,
-    "SIModel": SIModel,
-    "SISModel": SISModel,
-    "SIRVModel": SIRVModel,
-    "SIRDModel": SIRDModel,
-    "SIRDVModel": SIRDVModel,
-    "SEIRDModel": SEIRDModel,
-    "SEIRVModel": SEIRVModel,
-    "SEIRDVModel": SEIRDVModel,
-}
+def get_model_class(model_type: str) -> type:
+    """Dynamically import and return the model class.
+    
+    Args:
+        model_type: String name of the model class
+        
+    Returns:
+        The model class
+        
+    Raises:
+        ValueError: If model type is unknown
+    """
+    if model_type not in MODEL_REGISTRY:
+        raise ValueError(f"Unknown model type: {model_type}. Available models: {list(MODEL_REGISTRY.keys())}")
+    
+    module_path, class_name = MODEL_REGISTRY[model_type].rsplit('.', 1)
+    module = importlib.import_module(module_path)
+    return getattr(module, class_name)
 
 
 def validate_model_config(config: Dict[str, Any]) -> None:
@@ -61,7 +67,7 @@ def validate_model_config(config: Dict[str, Any]) -> None:
             raise KeyError(f"Missing required model key: {key}")
 
 
-def create_model_from_config(config: Dict[str, Any]) -> CompartmentalModel:
+def create_model_from_config(config: Dict[str, Any]) -> Any:
     """Create a compartmental model instance from configuration.
     
     Args:
@@ -74,10 +80,7 @@ def create_model_from_config(config: Dict[str, Any]) -> CompartmentalModel:
         ValueError: If model type is unknown
     """
     model_type = config["compartmental"]["model"]["type"]
-    if model_type not in MODEL_REGISTRY:
-        raise ValueError(f"Unknown model type: {model_type}")
-    
-    model_class = MODEL_REGISTRY[model_type]
+    model_class = get_model_class(model_type)
     return model_class()
 
 

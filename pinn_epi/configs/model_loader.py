@@ -7,7 +7,7 @@ from datetime import datetime
 from omegaconf import DictConfig, OmegaConf
 import hydra
 
-from pinn_epi.models.physics import CompartmentalModel, SIRModel, SEIRModel, SIModel, SISModel, SIRVModel, SIRDModel
+from pinn_epi.models.physics import CompartmentalModel, SIRModel, SEIRModel, SIModel, SISModel, SIRVModel, SIRDModel, SIRDVModel
 from pinn_epi.analysis.plotting import plot_compartmental_solution
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.data_wrangler import save_simulation_data
@@ -21,6 +21,7 @@ MODEL_REGISTRY = {
     "SISModel": SISModel,
     "SIRVModel": SIRVModel,
     "SIRDModel": SIRDModel,
+    "SIRDVModel": SIRDVModel,
 }
 
 
@@ -204,7 +205,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     if save_data:
         # Use Hydra's output directory for data as well
         hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%mdd_%H%M%S")
         model_type = config_dict["compartmental"]["model"]["type"]
         
         # Ensure the directory exists

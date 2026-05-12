@@ -1,0 +1,9 @@
+# SIRD (Susceptible-Infected-Recovered-Dead) model configuration
+model:
+  type: "SIRDModel"
+  parameters:
+    beta: 0.3   # infection rate
+    gamma: 0.1  # recovery rate
+    mu: 0.05    # death rate
+  initial_conditions: [0.95, 0.05, 0.0, 0.0]  # S(0), I(0), R(0), D(0)
+  output_size: 4

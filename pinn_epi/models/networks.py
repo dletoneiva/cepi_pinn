@@ -39,14 +39,17 @@ class BaseMLP(nn.Module):
 class HardICAnsatz(nn.Module):
     """Hard initial condition ansatz: u(t) = u0 + (t-t0) * NN(t)"""
     
-    def __init__(self, initial_conditions: torch.Tensor, t0: float):
+    def __init__(self, initial_conditions: torch.Tensor, t0: float, t1: float):
         super().__init__()
         self.register_buffer("u0", initial_conditions.clone().detach())
         self.t0 = t0
+        self.t1 = t1
         
     def forward(self, t: torch.Tensor, raw_output: torch.Tensor) -> torch.Tensor:
-        # t shape: [..., 1], raw_output shape: [..., n_compartments]
-        phi = (t - self.t0)  # shape: [..., 1]
+        # Normalize time to [-1, 1] to prevent Tanh saturation
+        t_norm = 2.0 * (t - self.t0) / (self.t1 - self.t0) - 1.0
+        # Apply the ansatz with normalized time
+        phi = (t - self.t0)
         return self.u0 + phi * raw_output
 
 

@@ -33,6 +33,16 @@ NATURE_STYLE: dict = {
     'figure.dpi': 300,  # Default resolution
 }
 
+# Font size hierarchy: figure title > axis labels > axis titles, legend and simulation description
+FONT_HIERARCHY: dict = {
+    'figure_title': 24,     # Largest
+    'axis_labels': 18,      # Medium
+    'axis_titles': 16,      # Smaller
+    'legend': 16,           # Same as axis titles
+    'description': 14,      # Smallest
+    'description_min': 10   # Minimum for wrapped text
+}
+
 # Color-blind friendly palette
 COMPARTMENT_COLORS = {                                                                
    'S': '#377EB8',
@@ -116,21 +126,21 @@ def plot_compartmental_solution(
         color = compartment_colors.get(name, f'C{compartment_names.index(name)}')
         ax.plot(t, trajectories[name], label=f'{name}(t)', color=color, lw=2)
 
-    # Set axis labels with proper LaTeX rendering for Greek letters
-    ax.set_xlabel('Time (days)', fontsize=18)
-    ax.set_ylabel('Fraction of Population', fontsize=18)
+    # Set axis labels with proper font sizing
+    ax.set_xlabel('Time (days)', fontsize=FONT_HIERARCHY['axis_labels'])
+    ax.set_ylabel('Fraction of Population', fontsize=FONT_HIERARCHY['axis_labels'])
     
     # Set title with model compartments if not provided
     if title is None:
         compartments = "".join(compartment_names)
         title = f"{compartments} Differential Equation Solutions"
     
-    ax.set_title(title, pad=60, fontsize=24)
+    ax.set_title(title, pad=60, fontsize=FONT_HIERARCHY['figure_title'])
 
     if created_fig:
         # Add legend above the plot with proper spacing
         legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
-                          columnspacing=1.5, handletextpad=0.5, fontsize=16)
+                          columnspacing=1.5, handletextpad=0.5, fontsize=FONT_HIERARCHY['legend'])
         # Use subplots_adjust instead of tight_layout for precise control
         plt.subplots_adjust(left=0.1, right=0.95, top=0.8, bottom=0.25)
 
@@ -198,9 +208,10 @@ def plot_compartmental_solution(
         lines = wrapped_text.count('\n') + 1
         
         # Adjust font size if text exceeds 2 lines
-        font_size = 14  # Smaller than axis labels and title
+        font_size = FONT_HIERARCHY['description']
         if lines > 2:
-            font_size = max(10, 14 - (lines - 2) * 2)  # Reduce font size but keep minimum of 10
+            font_size = max(FONT_HIERARCHY['description_min'], 
+                          FONT_HIERARCHY['description'] - (lines - 2) * 2)  # Reduce font size but keep minimum
         
         # Position text just below the x-axis label using axes coordinates
         ax.text(0.5, -0.25, wrapped_text, ha='center', va='top', fontsize=font_size,

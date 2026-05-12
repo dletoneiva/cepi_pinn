@@ -1,7 +1,7 @@
 """Centralized constants for the pinn_epi library."""
 
 # Model registry mapping model names to classes
-MODEL_REGISTRY = {
+COMPARTMENTAL_MODEL_REGISTRY = {
     "SIRModel": "pinn_epi.models.physics.SIRModel",
     "SEIRModel": "pinn_epi.models.physics.SEIRModel",
     "SIModel": "pinn_epi.models.physics.SIModel",

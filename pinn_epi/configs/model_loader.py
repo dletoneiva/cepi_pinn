@@ -12,7 +12,7 @@ import logging
 from pinn_epi.analysis.plotting import plot_compartmental_solution
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.data_wrangler import save_simulation_data
-from pinn_epi.constants import MODEL_REGISTRY
+from pinn_epi.constants import COMPARTMENTAL_MODEL_REGISTRY
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -30,10 +30,10 @@ def get_model_class(model_type: str) -> type:
     Raises:
         ValueError: If model type is unknown
     """
-    if model_type not in MODEL_REGISTRY:
-        raise ValueError(f"Unknown model type: {model_type}. Available models: {list(MODEL_REGISTRY.keys())}")
+    if model_type not in COMPARTMENTAL_MODEL_REGISTRY:
+        raise ValueError(f"Unknown model type: {model_type}. Available models: {list(COMPARTMENTAL_MODEL_REGISTRY.keys())}")
     
-    module_path, class_name = MODEL_REGISTRY[model_type].rsplit('.', 1)
+    module_path, class_name = COMPARTMENTAL_MODEL_REGISTRY[model_type].rsplit('.', 1)
     module = importlib.import_module(module_path)
     return getattr(module, class_name)
 
@@ -63,8 +63,8 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         raise KeyError("Missing required model key: type")
     
     model_type = model_section["type"]
-    if model_type not in MODEL_REGISTRY:
-        raise ValueError(f"Unknown model type: {model_type}. Available models: {list(MODEL_REGISTRY.keys())}")
+    if model_type not in COMPARTMENTAL_MODEL_REGISTRY:
+        raise ValueError(f"Unknown model type: {model_type}. Available models: {list(COMPARTMENTAL_MODEL_REGISTRY.keys())}")
     
     # Check model section
     model_keys = ["type", "parameters", "initial_conditions", "output_size"]

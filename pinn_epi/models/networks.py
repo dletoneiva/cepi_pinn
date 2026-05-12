@@ -36,6 +36,19 @@ class BaseMLP(nn.Module):
         return self.network(x)
 
 
+class TimeNormalizationEncoder(nn.Module):
+    """Encoder that normalizes time inputs to [-1, 1]."""
+    
+    def __init__(self, t0: float, t1: float):
+        super().__init__()
+        self.t0 = t0
+        self.t1 = t1
+        
+    def forward(self, t: torch.Tensor) -> torch.Tensor:
+        # Normalize time to [-1, 1] to prevent Tanh saturation
+        return 2.0 * (t - self.t0) / (self.t1 - self.t0) - 1.0
+
+
 class HardICAnsatz(nn.Module):
     """Hard initial condition ansatz: u(t) = u0 + (t-t0) * NN(t)"""
     
@@ -52,27 +65,25 @@ class HardICAnsatz(nn.Module):
 
 
 class ModularPINN(nn.Module):
-    """Composable PINN architecture with backbone and ansatz."""
+    """Composable PINN architecture with encoder, backbone, and ansatz."""
     
     def __init__(
         self,
         backbone: nn.Module,
         ansatz: Optional[nn.Module] = None,
-        t0: float = 0.0,
-        t1: float = 1.0
+        encoder: Optional[nn.Module] = None
     ):
         super().__init__()
+        self.encoder = encoder
         self.backbone = backbone
         self.ansatz = ansatz
-        self.t0 = t0
-        self.t1 = t1
         
     def forward(self, t: torch.Tensor) -> torch.Tensor:
-        # Normalize time to [-1, 1] to prevent Tanh saturation (mimicking notebook behavior)
-        t_norm = 2.0 * (t - self.t0) / (self.t1 - self.t0) - 1.0
+        # Apply encoder if present
+        features = self.encoder(t) if self.encoder else t
         
         # Apply backbone
-        raw_output = self.backbone(t_norm)
+        raw_output = self.backbone(features)
         
         # Apply ansatz if present
         if self.ansatz:

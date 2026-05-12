@@ -81,9 +81,9 @@ COMPARTMENT_COLORS = {
 
 # Resolution levels
 RESOLUTION_LEVELS = {
-    'low': 300,
+    'low': 600,
     'medium': 600,
-    'high': 1200
+    'high': 600
 }
 
 def apply_nature_style() -> None:
@@ -116,7 +116,7 @@ def plot_compartmental_solution(
             the caller controls display.
         save_path: Optional file path to save the figure (e.g.
             'figures/sir_sanity.png').  Directory must exist.
-        resolution: Figure resolution level ('low'=300, 'medium'=600, 'high'=1200).
+        resolution: Figure resolution level ('low'=600, 'medium'=600, 'high'=600).
         model_params: Optional dictionary of model parameters for display.
         initial_conditions: Optional list of initial conditions for display.
 
@@ -197,7 +197,13 @@ def plot_compartmental_solution(
                 transform=ax.transAxes)
 
     if save_path:
-        fig.savefig(save_path, bbox_inches='tight', dpi=dpi_value)
+        # Change extension to PDF if not already specified
+        if save_path and not save_path.endswith('.pdf'):
+            if '.' in save_path:
+                save_path = save_path.rsplit('.', 1)[0] + '.pdf'
+            else:
+                save_path = save_path + '.pdf'
+        fig.savefig(save_path, bbox_inches='tight', dpi=600)
         print(f"  Saved → {save_path}")
 
     if show:

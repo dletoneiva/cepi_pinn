@@ -15,32 +15,51 @@ import numpy as np
 
 
 # ---------------------------------------------------------------------------
-# Nature-style rcParams — apply once via apply_nature_style()
+# Nature-style rcParams with font hierarchy — apply once via apply_nature_style()
 # ---------------------------------------------------------------------------
 
+# Combined NATURE_STYLE with FONT_HIERARCHY
 NATURE_STYLE: dict = {
     'font.family': 'sans-serif',
     'font.sans-serif': ['Arial', 'Helvetica', 'DejaVu Sans'],
     'font.size': 16,  # Base font size
-    'axes.labelsize': 18,  # Axis labels
-    'axes.titlesize': 22,  # Axis titles
+    'axes.labelsize': 18,  # Axis labels (medium)
+    'axes.titlesize': 22,  # Axis titles (smaller)
     'axes.spines.top': True,
     'axes.spines.right': True,
     'xtick.labelsize': 16,
     'ytick.labelsize': 16,
-    'legend.fontsize': 16,  # Legend
+    'legend.fontsize': 16,  # Legend (same as axis titles)
     'figure.titlesize': 24,  # Figure title (largest)
     'figure.dpi': 300,  # Default resolution
 }
 
-# Font size hierarchy: figure title > axis labels > axis titles, legend and simulation description
-FONT_HIERARCHY: dict = {
-    'figure_title': 24,     # Largest
-    'axis_labels': 18,      # Medium
-    'axis_titles': 16,      # Smaller
-    'legend': 16,           # Same as axis titles
-    'description': 14,      # Smallest
-    'description_min': 10   # Minimum for wrapped text
+# Greek letters mapping for LaTeX rendering
+GREEK_LETTERS: dict = {
+    'alpha': r'$\alpha$',
+    'beta': r'$\beta$',
+    'gamma': r'$\gamma$',
+    'delta': r'$\delta$',
+    'epsilon': r'$\epsilon$',
+    'zeta': r'$\zeta$',
+    'eta': r'$\eta$',
+    'theta': r'$\theta$',
+    'iota': r'$\iota$',
+    'kappa': r'$\kappa$',
+    'lambda': r'$\lambda$',
+    'mu': r'$\mu$',
+    'nu': r'$\nu$',
+    'xi': r'$\xi$',
+    'omicron': r'$\omicron$',
+    'pi': r'$\pi$',
+    'rho': r'$\rho$',
+    'sigma': r'$\sigma$',
+    'tau': r'$\tau$',
+    'upsilon': r'$\upsilon$',
+    'phi': r'$\phi$',
+    'chi': r'$\chi$',
+    'psi': r'$\psi$',
+    'omega': r'$\omega$',
 }
 
 # Color-blind friendly palette
@@ -127,20 +146,20 @@ def plot_compartmental_solution(
         ax.plot(t, trajectories[name], label=f'{name}(t)', color=color, lw=2)
 
     # Set axis labels with proper font sizing
-    ax.set_xlabel('Time (days)', fontsize=FONT_HIERARCHY['axis_labels'])
-    ax.set_ylabel('Fraction of Population', fontsize=FONT_HIERARCHY['axis_labels'])
+    ax.set_xlabel('Time (days)', fontsize=NATURE_STYLE['axes.labelsize'])
+    ax.set_ylabel('Fraction of Population', fontsize=NATURE_STYLE['axes.labelsize'])
     
     # Set title with model compartments if not provided
     if title is None:
         compartments = "".join(compartment_names)
         title = f"{compartments} Differential Equation Solutions"
     
-    ax.set_title(title, pad=60, fontsize=FONT_HIERARCHY['figure_title'])
+    ax.set_title(title, pad=60, fontsize=NATURE_STYLE['figure.titlesize'])
 
     if created_fig:
         # Add legend above the plot with proper spacing
         legend = ax.legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=len(compartment_names), 
-                          columnspacing=1.5, handletextpad=0.5, fontsize=FONT_HIERARCHY['legend'])
+                          columnspacing=1.5, handletextpad=0.5, fontsize=NATURE_STYLE['legend.fontsize'])
         # Use subplots_adjust instead of tight_layout for precise control
         plt.subplots_adjust(left=0.1, right=0.95, top=0.8, bottom=0.25)
 
@@ -150,48 +169,8 @@ def plot_compartmental_solution(
         # Convert parameter names to LaTeX where appropriate
         param_items = []
         for k, v in model_params.items():
-            # Convert common Greek letters to LaTeX
-            latex_k = k
-            if k == 'beta':
-                latex_k = r'$\beta$'
-            elif k == 'gamma':
-                latex_k = r'$\gamma$'
-            elif k == 'sigma':
-                latex_k = r'$\sigma$'
-            elif k == 'mu':
-                latex_k = r'$\mu$'
-            elif k == 'rho':
-                latex_k = r'$\rho$'
-            elif k == 'alpha':
-                latex_k = r'$\alpha$'
-            elif k == 'delta':
-                latex_k = r'$\delta$'
-            elif k == 'theta':
-                latex_k = r'$\theta$'
-            elif k == 'lambda':
-                latex_k = r'$\lambda$'
-            elif k == 'epsilon':
-                latex_k = r'$\epsilon$'
-            elif k == 'omega':
-                latex_k = r'$\omega$'
-            elif k == 'tau':
-                latex_k = r'$\tau$'
-            elif k == 'phi':
-                latex_k = r'$\phi$'
-            elif k == 'chi':
-                latex_k = r'$\chi$'
-            elif k == 'psi':
-                latex_k = r'$\psi$'
-            elif k == 'eta':
-                latex_k = r'$\eta$'
-            elif k == 'nu':
-                latex_k = r'$\nu$'
-            elif k == 'xi':
-                latex_k = r'$\xi$'
-            elif k == 'pi':
-                latex_k = r'$\pi$'
-            elif k == 'kappa':
-                latex_k = r'$\kappa$'
+            # Convert common Greek letters to LaTeX using the mapping
+            latex_k = GREEK_LETTERS.get(k, k)  # Use original if not found in mapping
             param_items.append(f"{latex_k}={v}")
         
         param_str = ", ".join(param_items)
@@ -208,10 +187,9 @@ def plot_compartmental_solution(
         lines = wrapped_text.count('\n') + 1
         
         # Adjust font size if text exceeds 2 lines
-        font_size = FONT_HIERARCHY['description']
+        font_size = 14  # Base description size
         if lines > 2:
-            font_size = max(FONT_HIERARCHY['description_min'], 
-                          FONT_HIERARCHY['description'] - (lines - 2) * 2)  # Reduce font size but keep minimum
+            font_size = max(10, 14 - (lines - 2) * 2)  # Reduce font size but keep minimum of 10
         
         # Position text just below the x-axis label using axes coordinates
         ax.text(0.5, -0.25, wrapped_text, ha='center', va='top', fontsize=font_size,

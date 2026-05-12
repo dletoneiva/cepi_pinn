@@ -79,13 +79,6 @@ COMPARTMENT_COLORS = {
    'B': '#B3DE69',
  }                                 
 
-# Resolution levels
-RESOLUTION_LEVELS = {
-    'low': 600,
-    'medium': 600,
-    'high': 600
-}
-
 def apply_nature_style() -> None:
     """Apply Nature-journal-style matplotlib rcParams globally."""
     plt.rcParams.update(NATURE_STYLE)
@@ -98,7 +91,6 @@ def plot_compartmental_solution(
     ax: Optional[plt.Axes] = None,
     show: bool = False,
     save_path: Optional[str] = None,
-    resolution: str = 'medium',
     model_params: Optional[dict] = None,
     initial_conditions: Optional[list] = None,
 ) -> tuple[plt.Figure, plt.Axes]:
@@ -116,7 +108,6 @@ def plot_compartmental_solution(
             the caller controls display.
         save_path: Optional file path to save the figure (e.g.
             'figures/sir_sanity.png').  Directory must exist.
-        resolution: Figure resolution level ('low'=600, 'medium'=600, 'high'=600).
         model_params: Optional dictionary of model parameters for display.
         initial_conditions: Optional list of initial conditions for display.
 
@@ -124,16 +115,12 @@ def plot_compartmental_solution(
         (fig, ax) where fig is the matplotlib Figure and ax is the Axes.
     """
 
-    if resolution not in RESOLUTION_LEVELS:
-        raise ValueError(f"Resolution must be one of {list(RESOLUTION_LEVELS.keys())}")
-    dpi_value = RESOLUTION_LEVELS[resolution]
-
     compartment_names = list(trajectories.keys())
 
     # --- plotting ---
     created_fig = ax is None
     if created_fig:
-        fig, ax = plt.subplots(figsize=(12, 8), dpi=dpi_value)
+        fig, ax = plt.subplots(figsize=(12, 8), dpi=600)
     else:
         fig = ax.get_figure()
 

@@ -74,10 +74,3 @@ PLOT_STYLE = {
     'figure.titlesize': 20,
     'figure.dpi': 300,
 }
-
-# Resolution levels for saving figures
-RESOLUTION_LEVELS = {
-    'low': 300,
-    'medium': 600,
-    'high': 1200
-}

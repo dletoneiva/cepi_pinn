@@ -154,38 +154,43 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     
     # Handle plotting
     plotting_config = config_dict.get("plotting", {})
-    if plotting_config.get("show_plot", True):
-        # Determine save path if saving is requested
-        save_path = None
-        if plotting_config.get("save_plot", False):
-            # Use Hydra's output directory
-            hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_type = config_dict["compartmental"]["model"]["type"]
-            save_path = f"{hydra_output_dir}/{model_type}_simulation_{timestamp}.pdf"
+    show_plot = plotting_config.get("show_plot", True)
+    save_plot = plotting_config.get("save_plot", False)
+    
+    # Determine save path if saving is requested
+    save_path = None
+    if save_plot:
+        # Use Hydra's output directory
+        hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_type = config_dict["compartmental"]["model"]["type"]
+        save_path = f"{hydra_output_dir}/{model_type}_simulation_{timestamp}.pdf"
         
-        # Generate title based on model compartments if not provided
-        title = plotting_config.get("title")
-        if title == "Compartmental Model Simulation":  # Default title, replace with model-specific one
-            # Get compartment names from the model
-            compartment_names = model.compartment_names
-            compartments_str = "".join(compartment_names)
-            title = f"{compartments_str} differential equation solutions"
-        
-        fig, ax = plot_compartmental_solution(
-            t=t_eval,
-            trajectories=trajectories,
-            title=title,
-            show=plotting_config.get("show_plot", True),
-            save_path=save_path,
-            model_params=params,
-            initial_conditions=y0,
-        )
-        result["figure"] = fig
-        result["axes"] = ax
-        
-        if save_path:
-            result["save_path"] = save_path
-            print(f"Figure saved to: {save_path}")
+        # Ensure the directory exists
+        os.makedirs(hydra_output_dir, exist_ok=True)
+    
+    # Generate title based on model compartments if not provided
+    title = plotting_config.get("title")
+    if title == "Compartmental Model Simulation":  # Default title, replace with model-specific one
+        # Get compartment names from the model
+        compartment_names = model.compartment_names
+        compartments_str = "".join(compartment_names)
+        title = f"{compartments_str} differential equation solutions"
+    
+    fig, ax = plot_compartmental_solution(
+        t=t_eval,
+        trajectories=trajectories,
+        title=title,
+        show=show_plot,
+        save_path=save_path,
+        model_params=params,
+        initial_conditions=y0,
+    )
+    result["figure"] = fig
+    result["axes"] = ax
+    
+    if save_path:
+        result["save_path"] = save_path
+        print(f"Figure saved to: {save_path}")
     
     return result

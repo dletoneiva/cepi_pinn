@@ -60,14 +60,12 @@ class ModularPINN(nn.Module):
         self,
         backbone: nn.Module,
         ansatz: Optional[nn.Module] = None,
-        encoder: Optional[nn.Module] = None,
-        output_transform: Optional[nn.Module] = None
+        encoder: Optional[nn.Module] = None
     ):
         super().__init__()
         self.encoder = encoder
         self.backbone = backbone
         self.ansatz = ansatz
-        self.output_transform = output_transform
         
     def forward(self, t: torch.Tensor) -> torch.Tensor:
         # Apply encoder if present
@@ -79,9 +77,5 @@ class ModularPINN(nn.Module):
         # Apply ansatz if present
         if self.ansatz:
             raw_output = self.ansatz(t, raw_output)
-            
-        # Apply output transform if present
-        if self.output_transform:
-            raw_output = self.output_transform(raw_output)
             
         return raw_output

@@ -10,6 +10,7 @@ import hydra
 from pinn_epi.models.physics import CompartmentalModel, SIRModel, SEIRModel, SIModel
 from pinn_epi.analysis.plotting import plot_compartmental_solution
 from pinn_epi.analysis.evaluator import solve_compartmental_model
+from pinn_epi.analysis.data_wrangler import save_simulation_data
 
 
 # Mapping of model names to classes
@@ -192,5 +193,32 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     if save_path:
         result["save_path"] = save_path
         print(f"Figure saved to: {save_path}")
+    
+    # Handle data saving
+    data_config = config_dict.get("data", {})
+    save_data = data_config.get("save_data", True)
+    
+    if save_data:
+        # Use Hydra's output directory for data as well
+        hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_type = config_dict["compartmental"]["model"]["type"]
+        
+        # Ensure the directory exists
+        os.makedirs(hydra_output_dir, exist_ok=True)
+        
+        # Save simulation data
+        save_simulation_data(
+            trajectories=trajectories,
+            model_params=params,
+            initial_conditions=y0,
+            compartment_names=model.compartment_names,
+            save_dir=hydra_output_dir,
+            t_eval=t_eval,
+            file_prefix=f"{model_type}_simulation_{timestamp}"
+        )
+        
+        result["data_save_path"] = hydra_output_dir
+        print(f"Data saved to: {hydra_output_dir}")
     
     return result

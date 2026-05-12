@@ -15,6 +15,3 @@ plotting:
 
 data:
   save_data: true
-
-seed: 42
-device: "cpu"

@@ -1,0 +1,10 @@
+# SEIRD (Susceptible-Exposed-Infected-Recovered-Dead) model configuration
+model:
+  type: "SEIRDModel"
+  parameters:
+    beta: 0.3   # infection rate
+    sigma: 0.2  # rate of progression from E to I
+    gamma: 0.1  # recovery rate
+    mu: 0.05    # death rate
+  initial_conditions: [0.95, 0.02, 0.03, 0.0, 0.0]  # S(0), E(0), I(0), R(0), D(0)
+  output_size: 5

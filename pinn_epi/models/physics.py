@@ -188,3 +188,82 @@ class SIRDVModel(CompartmentalModel):
         dD_dt = mu * I
         dV_dt = nu * S
         return torch.stack([dS_dt, dI_dt, dR_dt, dD_dt, dV_dt], dim=-1)
+
+
+class SEIRDModel(CompartmentalModel):
+    """SEIRD (Susceptible-Exposed-Infected-Recovered-Dead) epidemiological model."""
+
+    @property
+    def compartment_names(self) -> list[str]:
+        return ['S', 'E', 'I', 'R', 'D']
+
+    @property
+    def should_conserve(self) -> bool:
+        return False  # Total population is not conserved due to deaths
+
+    def get_derivatives(
+        self, t: torch.Tensor, u: torch.Tensor, params: dict
+    ) -> torch.Tensor:
+        S, E, I, R, D = u[..., 0], u[..., 1], u[..., 2], u[..., 3], u[..., 4]
+        beta: float = params['beta']
+        sigma: float = params['sigma']  # rate of progression from E to I
+        gamma: float = params['gamma']  # recovery rate
+        mu: float = params['mu']        # death rate
+        dS_dt = -beta * S * I
+        dE_dt = beta * S * I - sigma * E
+        dI_dt = sigma * E - (gamma + mu) * I
+        dR_dt = gamma * I
+        dD_dt = mu * I
+        return torch.stack([dS_dt, dE_dt, dI_dt, dR_dt, dD_dt], dim=-1)
+
+
+class SEIRVModel(CompartmentalModel):
+    """SEIRV (Susceptible-Exposed-Infected-Recovered-Vaccinated) epidemiological model."""
+
+    @property
+    def compartment_names(self) -> list[str]:
+        return ['S', 'E', 'I', 'R', 'V']
+
+    def get_derivatives(
+        self, t: torch.Tensor, u: torch.Tensor, params: dict
+    ) -> torch.Tensor:
+        S, E, I, R, V = u[..., 0], u[..., 1], u[..., 2], u[..., 3], u[..., 4]
+        beta: float = params['beta']
+        sigma: float = params['sigma']  # rate of progression from E to I
+        gamma: float = params['gamma']  # recovery rate
+        nu: float = params['nu']        # vaccination rate
+        dS_dt = -beta * S * I - nu * S
+        dE_dt = beta * S * I - sigma * E
+        dI_dt = sigma * E - gamma * I
+        dR_dt = gamma * I
+        dV_dt = nu * S
+        return torch.stack([dS_dt, dE_dt, dI_dt, dR_dt, dV_dt], dim=-1)
+
+
+class SEIRDVModel(CompartmentalModel):
+    """SEIRDV (Susceptible-Exposed-Infected-Recovered-Dead-Vaccinated) epidemiological model."""
+
+    @property
+    def compartment_names(self) -> list[str]:
+        return ['S', 'E', 'I', 'R', 'D', 'V']
+
+    @property
+    def should_conserve(self) -> bool:
+        return False  # Total population is not conserved due to deaths
+
+    def get_derivatives(
+        self, t: torch.Tensor, u: torch.Tensor, params: dict
+    ) -> torch.Tensor:
+        S, E, I, R, D, V = u[..., 0], u[..., 1], u[..., 2], u[..., 3], u[..., 4], u[..., 5]
+        beta: float = params['beta']
+        sigma: float = params['sigma']  # rate of progression from E to I
+        gamma: float = params['gamma']  # recovery rate
+        mu: float = params['mu']        # death rate
+        nu: float = params['nu']        # vaccination rate
+        dS_dt = -beta * S * I - nu * S
+        dE_dt = beta * S * I - sigma * E
+        dI_dt = sigma * E - (gamma + mu) * I
+        dR_dt = gamma * I
+        dD_dt = mu * I
+        dV_dt = nu * S
+        return torch.stack([dS_dt, dE_dt, dI_dt, dR_dt, dD_dt, dV_dt], dim=-1)

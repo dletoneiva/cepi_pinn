@@ -160,7 +160,11 @@ def main(cfg: DictConfig) -> None:
             params=model_params,    # Pass model_params directly
             t_eval=np.linspace(cfg.training.data.t_span[0], cfg.training.data.t_span[1], cfg.training.data.num_points)
         )
-        data = solution
+        
+        # Format the data properly for the trainer
+        data = {'t': solution['t']}
+        for i, comp in enumerate(physics_model.compartment_names):
+            data[comp] = solution[comp]
     
     # Create PINN model
     pinn_model = create_pinn_model(cfg, output_dim, initial_conditions)

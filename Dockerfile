@@ -42,8 +42,11 @@ ENV HOME=/home/appuser
 ENV TORCH_HOME=/home/appuser/.cache/torch
 
 # Create necessary directories and set permissions
-RUN mkdir -p /home/appuser/.cache/torch_extensions /home/appuser/.cache \
+RUN mkdir -p /home/appuser/.cache/torch_extensions /home/appuser/.cache /home/appuser/.config \
     && chown -R 1000:1000 /home/appuser
+
+# Set MPLCONFIGDIR to avoid matplotlib permission issues
+ENV MPLCONFIGDIR=/home/appuser/.config/matplotlib
 
 # Cria o diretório de trabalho
 WORKDIR /app
@@ -63,6 +66,9 @@ RUN chown -R 1000:1000 /app
 
 # Switch to appuser
 USER appuser
+
+# Create matplotlib config directory
+RUN mkdir -p /home/appuser/.config/matplotlib
 
 # Instala o pacote em modo editável
 RUN pip3 install -e .

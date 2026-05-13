@@ -11,8 +11,9 @@ services:
       - HOME=/app
       - XDG_CACHE_HOME=/app/.cache
       - XDG_CONFIG_HOME=/app/.config
-    tty: true           # Garante o suporte ao modo interativo
-    stdin_open: true    # Garante o suporte ao modo interativo
+      - MLFLOW_TRACKING_URI=sqlite:///mlflow/mlflow.db
+    tty: true
+    stdin_open: true
     deploy:
       resources:
         limits:
@@ -24,5 +25,8 @@ services:
               capabilities: [gpu]
     
     # Comando padrão vazio ou simples, já que você vai passar o script via CLI
-    command: python3
+    command: bash
     user: "1000:1000"
+    ports:
+      - "8888:8888"
+      - "5000:5000"

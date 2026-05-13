@@ -5,6 +5,7 @@ from omegaconf import DictConfig, OmegaConf
 import torch
 import numpy as np
 import logging
+import os
 from pinn_epi.configs.model_loader import (
     create_model_from_config, 
     get_model_parameters, 

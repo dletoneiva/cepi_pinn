@@ -117,7 +117,13 @@ def main(cfg: DictConfig) -> None:
     
     # Get model parameters and initial conditions
     model_params = get_model_parameters(cfg.compartmental.model)
-    initial_conditions = get_initial_conditions(cfg.compartmental.model)
+    
+    # Try to get initial conditions from the config directly first
+    if hasattr(cfg.compartmental.model, 'initial_conditions'):
+        initial_conditions = list(cfg.compartmental.model.initial_conditions)
+    else:
+        # Fallback to using the model loader function
+        initial_conditions = get_initial_conditions(cfg.compartmental.model)
     
     # Debug: Print initial conditions
     logger.info(f"Model type: {model_type}")

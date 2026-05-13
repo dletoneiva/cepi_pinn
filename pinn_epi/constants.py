@@ -1,6 +1,12 @@
 """Centralized constants for the pinn_epi library."""
 
 # Model registry mapping model names to classes
+from pinn_epi.models.physics import (
+    SIRModel, SEIRModel, SIModel, SISModel, 
+    SIRVModel, SIRDModel, SIRDVModel, SEIRDModel, 
+    SEIRVModel, SEIRDVModel
+)
+
 COMPARTMENTAL_MODEL_REGISTRY = {
     "SIRModel": "pinn_epi.models.physics.SIRModel",
     "SEIRModel": "pinn_epi.models.physics.SEIRModel",
@@ -12,6 +18,20 @@ COMPARTMENTAL_MODEL_REGISTRY = {
     "SEIRDModel": "pinn_epi.models.physics.SEIRDModel",
     "SEIRVModel": "pinn_epi.models.physics.SEIRVModel",
     "SEIRDVModel": "pinn_epi.models.physics.SEIRDVModel",
+}
+
+# Map model types to their classes for easy access
+COMPARTMENTAL_MODEL_MAP = {
+    'sir': SIRModel,
+    'seir': SEIRModel,
+    'si': SIModel,
+    'sis': SISModel,
+    'sird': SIRDModel,
+    'sirv': SIRVModel,
+    'seird': SEIRDModel,
+    'seirv': SEIRVModel,
+    'sirdv': SIRDVModel,
+    'seirdv': SEIRDVModel
 }
 
 # Standard compartment colors for plotting

@@ -43,24 +43,21 @@ ENV HYDRA_FULL_ERROR=1
 # Cria symlink para python -> python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
-# Create user with UID 1000 to match host user
-RUN useradd -m -u 1000 -s /bin/bash appuser
-
 # Set environment variables to avoid getpwuid error
-ENV USER=appuser
-ENV HOME=/home/appuser
+ENV USER=dockeruser
+ENV HOME=/tmp
+
+# Create necessary directories
+RUN mkdir -p /tmp/.cache/torch_extensions
 
 # Copia os arquivos do projeto
 COPY . /app
 
-# Change ownership of the app directory to appuser
-RUN chown -R appuser:appuser /app
+# Change ownership of the app directory
+RUN chown -R 1000:1000 /app
 
-# Switch to appuser
-USER appuser
-
-# Create necessary directories for the user
-RUN mkdir -p /home/appuser/.cache/torch_extensions
+# Set permissions for cache directories
+RUN chmod -R 777 /tmp
 
 # Instala o pacote em modo editável
 RUN pip3 install -e .

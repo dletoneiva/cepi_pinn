@@ -147,17 +147,3 @@ def main(cfg: DictConfig) -> None:
 
 if __name__ == "__main__":
     main()
-```
-
-Now, to run a test training on the SIR model, you'll need to make sure you have the appropriate configuration files set up. Here's what you should check:
-
-1. Make sure you have a training configuration file in `configs/training/` (e.g., `test.yaml`)
-2. Ensure your base configuration (`configs/base.yaml`) properly references the training config
-3. Make sure your compartmental model config (`configs/compartmental/sir.yaml`) is properly set up
-
-You should be able to run the training with:
-```bash
-python pinn_epi/experiments/train_pinn.py
-```
-
-The current implementation should work with the existing codebase, but you might need to adjust some configuration parameters based on your specific setup.

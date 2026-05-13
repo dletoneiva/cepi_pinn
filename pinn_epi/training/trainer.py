@@ -3,9 +3,9 @@
 import torch
 import numpy as np
 import logging
+from typing import Dict, Any, Tuple, Optional
 from pinn_epi.models.networks import ModularPINN
 from pinn_epi.models.physics import CompartmentalModel
-from pinn_epi.data.generator import ODESimulator
 import mlflow
 
 # Set up logging
@@ -29,7 +29,7 @@ class PINNTrainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
 
-    def sample_collocation_points(self, t_range, n_points):
+    def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """
         Sample collocation points for physics loss evaluation.
 
@@ -41,38 +41,52 @@ class PINNTrainer:
             torch.Tensor: Collocation points.
         """
         t_min, t_max = t_range
-        return torch.linspace(t_min, t_max, n_points).to(self.device)
+        # Sample random points in the interval
+        return (t_min + (t_max - t_min) * torch.rand(n_points)).to(self.device)
 
-    def compute_loss(self, t, y_true, collocation_points):
+    def compute_loss(self, t_data: torch.Tensor, y_data: torch.Tensor, collocation_points: torch.Tensor, target_compartments: list) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Compute the total loss for the PINN model.
 
         Args:
-            t: Time points for the empirical data.
-            y_true: Ground truth data.
+            t_data: Time points for the empirical data.
+            y_data: Ground truth data for target compartments.
             collocation_points: Collocation points for physics loss.
+            target_compartments: List of compartment names to train on.
 
         Returns:
-            torch.Tensor: Total loss.
+            Tuple of (total_loss, data_loss, physics_loss)
         """
-        t = torch.tensor(t, dtype=torch.float32).view(-1, 1).to(self.device)
-        y_true = torch.tensor(y_true, dtype=torch.float32).to(self.device)
-        collocation_points = collocation_points.view(-1, 1)
-
         # Data loss
-        y_pred = self.model(t)
-        data_loss = torch.mean((y_pred - y_true) ** 2)
+        y_pred_data = self.model(t_data)
+        
+        # Select only the target compartments for data loss calculation
+        compartment_indices = [self.physics_model.compartment_names.index(comp) for comp in target_compartments]
+        y_pred_selected = y_pred_data[:, compartment_indices]
+        data_loss = torch.mean((y_pred_selected - y_data) ** 2)
 
         # Physics loss
-        y_pred_colloc = self.model(collocation_points)
-        t_colloc = collocation_points.clone().requires_grad_(True)
-        y_pred_colloc = self.model(t_colloc)
-        y_pred_colloc = y_pred_colloc.view(-1, y_pred_colloc.shape[-1])
-        residuals = self.physics_model.get_derivatives(t_colloc, y_pred_colloc, self.config['physics_params'])
-        physics_loss = torch.mean(residuals ** 2)
+        t_phys = collocation_points.clone().requires_grad_(True)
+        y_pred_phys = self.model(t_phys)
+        
+        # Compute derivatives using autograd
+        du_dt = []
+        for i in range(y_pred_phys.shape[1]):
+            grad = torch.autograd.grad(
+                y_pred_phys[:, i], 
+                t_phys, 
+                grad_outputs=torch.ones_like(y_pred_phys[:, i]),
+                create_graph=True
+            )[0]
+            du_dt.append(grad)
+        du_dt = torch.cat(du_dt, dim=1)
+        
+        # Get physics residuals
+        physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, self.config.get('physics_params', {}))
+        physics_loss = torch.mean((du_dt - physics_residuals) ** 2)
 
         # Total loss
-        total_loss = data_loss + self.config['lambda_phys'] * physics_loss
+        total_loss = self.config.get('data_weight', 1.0) * data_loss + self.config.get('physics_weight', 1.0) * physics_loss
 
         return total_loss, data_loss, physics_loss
 
@@ -80,30 +94,54 @@ class PINNTrainer:
         """
         Train the PINN model using Adam and L-BFGS optimizers.
         """
-        optimizer_adam = torch.optim.Adam(self.model.parameters(), lr=self.config['adam_lr'])
-        optimizer_lbfgs = torch.optim.LBFGS(self.model.parameters(), max_iter=self.config['lbfgs_max_iter'], line_search_fn="strong_wolfe")
+        # Prepare data
+        t_array = self.data['t']
+        target_compartments = self.config.get('target_compartments', self.physics_model.compartment_names)
+        
+        # Extract target compartment data
+        y_true_list = [self.data[comp] for comp in target_compartments]
+        y_true_array = np.column_stack(y_true_list)
+        
+        # Convert to tensors
+        t_tensor = torch.tensor(t_array, dtype=torch.float32).view(-1, 1).to(self.device)
+        y_true_tensor = torch.tensor(y_true_array, dtype=torch.float32).to(self.device)
+        
+        # Optimizers
+        optimizer_adam = torch.optim.Adam(self.model.parameters(), lr=self.config.get('adam_lr', 1e-3))
+        optimizer_lbfgs = torch.optim.LBFGS(self.model.parameters(), 
+                                          max_iter=self.config.get('lbfgs_max_iter', 100), 
+                                          line_search_fn="strong_wolfe")
 
-        t = self.data['t']
-        y_true = self.data['y_true']
-        collocation_points = self.sample_collocation_points((t[0], t[-1]), self.config['n_collocation_points'])
+        # Training parameters
+        adam_epochs = self.config.get('adam_epochs', 5000)
+        n_collocation_points = self.config.get('n_collocation_points', 100)
+        log_interval = self.config.get('log_interval', 100)
+        
+        # Sample collocation points
+        t_min, t_max = t_array.min(), t_array.max()
+        collocation_points = self.sample_collocation_points((t_min, t_max), n_collocation_points)
 
         # Adam phase
-        for epoch in range(self.config['adam_epochs']):
+        for epoch in range(adam_epochs):
             optimizer_adam.zero_grad()
-            total_loss, data_loss, physics_loss = self.compute_loss(t, y_true, collocation_points)
+            total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, y_true_tensor, collocation_points, target_compartments)
             total_loss.backward()
             optimizer_adam.step()
 
-            if epoch % self.config['log_interval'] == 0:
-                logger.info(f"Epoch {epoch}/{self.config['adam_epochs']} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}")
-                mlflow.log_metric("total_loss", total_loss.item(), step=epoch)
-                mlflow.log_metric("data_loss", data_loss.item(), step=epoch)
-                mlflow.log_metric("physics_loss", physics_loss.item(), step=epoch)
+            if epoch % log_interval == 0:
+                logger.info(f"Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}")
+                # Log metrics with MLflow
+                try:
+                    mlflow.log_metric("total_loss", total_loss.item(), step=epoch)
+                    mlflow.log_metric("data_loss", data_loss.item(), step=epoch)
+                    mlflow.log_metric("physics_loss", physics_loss.item(), step=epoch)
+                except Exception as e:
+                    logger.warning(f"Failed to log metrics to MLflow: {e}")
 
         # L-BFGS phase
         def closure():
             optimizer_lbfgs.zero_grad()
-            total_loss, _, _ = self.compute_loss(t, y_true, collocation_points)
+            total_loss, _, _ = self.compute_loss(t_tensor, y_true_tensor, collocation_points, target_compartments)
             total_loss.backward()
             return total_loss
 
@@ -111,42 +149,4 @@ class PINNTrainer:
 
         logger.info("Training completed successfully")
 
-if __name__ == "__main__":
-    # Example usage
-    from pinn_epi.models.networks import BaseMLP, HardICAnsatz, ModularPINN
-    from pinn_epi.models.physics import SIRModel
-    from pinn_epi.data.generator import ODESimulator
-
-    # Example configuration
-    config = {
-        'adam_lr': 1e-3,
-        'adam_epochs': 5000,
-        'lbfgs_max_iter': 500,
-        'n_collocation_points': 100,
-        'lambda_phys': 1.0,
-        'log_interval': 100,
-        'physics_params': {'beta': 0.4, 'gamma': 0.1},
-        'seed': 42
-    }
-
-    # Example data
-    t_max = 30
-    t_eval = np.linspace(0, t_max, 150)
-    y0 = [0.99, 0.01, 0.00]
-    physics_model = SIRModel()
-    simulator = ODESimulator(physics_model)
-    data = simulator.generate([0, t_max], y0, config['physics_params'], t_eval)
-
-    # Example model
-    backbone = BaseMLP(input_dim=1, output_dim=3, hidden_dims=[128, 128, 128])
-    ansatz = HardICAnsatz(t0=0.0, initial_conditions=y0)
-    model = ModularPINN(encoder=None, backbone=backbone, ansatz=ansatz)
-
-    # Initialize and train the PINNTrainer
-    trainer = PINNTrainer(model, physics_model, data, config)
-    trainer.train()
-```
-
-### Updated `pinn_epi/experiments/train_pinn.py`
-
-pinn_epi/experiments/train_pinn.py
+# Example usage moved to experiments/train_pinn.py

@@ -8,9 +8,9 @@ services:
     volumes:
       - .:/app
     environment:
-      - HOME=/app
-      - XDG_CACHE_HOME=/app/.cache
-      - XDG_CONFIG_HOME=/app/.config
+      - HOME=/home/appuser
+      - XDG_CACHE_HOME=/home/appuser/.cache
+      - XDG_CONFIG_HOME=/home/appuser/.config
       - MLFLOW_TRACKING_URI=sqlite:///mlflow/mlflow.db
       - USER=appuser
     tty: true
@@ -27,7 +27,7 @@ services:
     
     # Comando padrão vazio ou simples, já que você vai passar o script via CLI
     command: bash
-    user: "appuser"
+    user: "1000:1000"
     ports:
       - "8888:8888"
       - "5000:5000"

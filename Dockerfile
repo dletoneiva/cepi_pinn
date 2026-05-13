@@ -36,6 +36,15 @@ RUN pip3 install --no-cache-dir \
 # Create user with UID 1000 to match host user and properly add to passwd
 RUN useradd -m -u 1000 -s /bin/bash appuser
 
+# Set environment variables to avoid getpwuid error
+ENV USER=appuser
+ENV HOME=/home/appuser
+ENV TORCH_HOME=/home/appuser/.cache/torch
+
+# Create necessary directories and set permissions
+RUN mkdir -p /home/appuser/.cache/torch_extensions /home/appuser/.cache \
+    && chown -R 1000:1000 /home/appuser
+
 # Cria o diretório de trabalho
 WORKDIR /app
 
@@ -46,15 +55,6 @@ ENV HYDRA_FULL_ERROR=1
 # Cria symlink para python -> python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
-# Set environment variables to avoid getpwuid error
-ENV USER=appuser
-ENV HOME=/home/appuser
-ENV TORCH_HOME=/home/appuser/.cache/torch
-
-# Create necessary directories and set permissions
-RUN mkdir -p /home/appuser/.cache/torch_extensions /home/appuser/.cache \
-    && chown -R 1000:1000 /home/appuser
-
 # Copia os arquivos do projeto
 COPY . /app
 
@@ -63,9 +63,6 @@ RUN chown -R 1000:1000 /app
 
 # Switch to appuser
 USER appuser
-
-# Set up environment to avoid getpwuid error
-ENV USER=appuser
 
 # Instala o pacote em modo editável
 RUN pip3 install -e .

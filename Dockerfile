@@ -30,7 +30,8 @@ RUN pip3 install --no-cache-dir \
     pytest \
     black \
     isort \
-    flake8
+    flake8 \
+    mlflow
 
 # Cria o diretório de trabalho
 WORKDIR /app
@@ -38,6 +39,9 @@ WORKDIR /app
 # Adiciona o diretório atual ao PYTHONPATH
 ENV PYTHONPATH=/app:$PYTHONPATH
 ENV HYDRA_FULL_ERROR=1
+
+# Cria symlink para python -> python3
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Copia os arquivos do projeto
 COPY . /app
@@ -47,6 +51,7 @@ RUN pip3 install -e .
 
 # Expondo a porta para o Jupyter Lab (opcional)
 EXPOSE 8888
+EXPOSE 5000
 
 # Comando padrão
 CMD ["bash"]

@@ -116,7 +116,12 @@ def main(cfg: DictConfig) -> None:
     physics_model = model_class()
     
     # Get model parameters and initial conditions
-    model_params = get_model_parameters(cfg.compartmental.model)
+    # Try to get parameters from the config directly first
+    if hasattr(cfg.compartmental.model, 'parameters'):
+        model_params = dict(cfg.compartmental.model.parameters)
+    else:
+        # Fallback to using the model loader function
+        model_params = get_model_parameters(cfg.compartmental.model)
     
     # Try to get initial conditions from the config directly first
     if hasattr(cfg.compartmental.model, 'initial_conditions'):
@@ -125,7 +130,7 @@ def main(cfg: DictConfig) -> None:
         # Fallback to using the model loader function
         initial_conditions = get_initial_conditions(cfg.compartmental.model)
     
-    # Debug: Print initial conditions
+    # Debug: Print initial conditions and parameters
     logger.info(f"Model type: {model_type}")
     logger.info(f"Initial conditions from config: {initial_conditions}")
     logger.info(f"Model compartments: {physics_model.compartment_names}")

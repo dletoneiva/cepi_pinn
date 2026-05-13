@@ -1,9 +1,30 @@
-training:
-  epochs: 5
-  batch_size: 32
-  learning_rate: 0.001
-  optimizer: "adam"
-  loss_weights:
-    data: 1.0
-    physics: 1.0
-    initial: 1.0
+# Training configuration for testing
+
+# Data configuration
+data:
+  source: "generated"  # or "file"
+  file_path: ""  # path to data file if source is "file"
+  t_span: [0, 30]  # time span for generated data
+  num_points: 100  # number of points for generated data
+
+# Training parameters
+adam_epochs: 100
+adam_lr: 0.001
+lbfgs_max_iter: 50
+n_collocation_points: 50
+log_interval: 10
+
+# Loss weights
+data_weight: 1.0
+physics_weight: 1.0
+
+# Target compartments (which compartments to train on)
+target_compartments: ["S", "I", "R"]
+
+# Physics parameters (will be passed to the physics model)
+physics_params: {}
+
+# MLflow settings
+mlflow:
+  enabled: false
+  experiment_name: "pinn_training_test"

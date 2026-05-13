@@ -126,7 +126,7 @@ def main(cfg: DictConfig) -> None:
         solution = solve_compartmental_model(
             model=physics_model,
             t_span=cfg.training.data.t_span,
-            y0=initial_conditions,
+            y0=initial_conditions,  # Pass initial_conditions directly
             params=model_params,
             t_eval=np.linspace(cfg.training.data.t_span[0], cfg.training.data.t_span[1], cfg.training.data.num_points)
         )

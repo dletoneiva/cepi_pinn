@@ -46,6 +46,10 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # Create user with UID 1000 to match host user
 RUN useradd -m -u 1000 -s /bin/bash appuser
 
+# Set environment variables to avoid getpwuid error
+ENV USER=appuser
+ENV HOME=/home/appuser
+
 # Copia os arquivos do projeto
 COPY . /app
 
@@ -54,6 +58,9 @@ RUN chown -R appuser:appuser /app
 
 # Switch to appuser
 USER appuser
+
+# Create necessary directories for the user
+RUN mkdir -p /home/appuser/.cache/torch_extensions
 
 # Instala o pacote em modo editável
 RUN pip3 install -e .

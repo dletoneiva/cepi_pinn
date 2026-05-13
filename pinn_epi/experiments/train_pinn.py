@@ -165,20 +165,14 @@ def main(cfg: DictConfig) -> None:
         # Check what keys are in the solution dictionary
         logger.info(f"Solution keys: {solution.keys()}")
         
-        # If 't' is not in solution, create it from t_eval
-        if 't' in solution:
-            data = {'t': solution['t']}
-        else:
-            # Create time array from t_span and num_points
-            data = {'t': np.linspace(cfg.training.data.t_span[0], cfg.training.data.t_span[1], cfg.training.data.num_points)}
-            
+        # Create time array from t_span and num_points
+        t_eval = np.linspace(cfg.training.data.t_span[0], cfg.training.data.t_span[1], cfg.training.data.num_points)
+        data = {'t': t_eval}
+        
         # Add compartment data
-        for i, comp in enumerate(physics_model.compartment_names):
+        for comp in physics_model.compartment_names:
             if comp in solution:
                 data[comp] = solution[comp]
-            elif i < len(solution.values()):
-                # Try to get data by index if keys don't match
-                data[comp] = list(solution.values())[i]
     
     # Create PINN model
     pinn_model = create_pinn_model(cfg, output_dim, initial_conditions)

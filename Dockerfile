@@ -34,7 +34,7 @@ RUN pip3 install --no-cache-dir \
     mlflow
 
 # Create user with UID 1000 to match host user
-RUN useradd -m -u 1000 -s /bin/bash dockeruser
+RUN useradd -m -u 1000 -s /bin/bash appuser
 
 # Cria o diretório de trabalho
 WORKDIR /app
@@ -47,22 +47,25 @@ ENV HYDRA_FULL_ERROR=1
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Set environment variables to avoid getpwuid error
-ENV USER=dockeruser
-ENV HOME=/home/dockeruser
-ENV TORCH_HOME=/home/dockeruser/.cache/torch
+ENV USER=appuser
+ENV HOME=/home/appuser
+ENV TORCH_HOME=/home/appuser/.cache/torch
 
 # Create necessary directories and set permissions
-RUN mkdir -p /home/dockeruser/.cache/torch_extensions /home/dockeruser/.cache \
-    && chown -R dockeruser:dockeruser /home/dockeruser
+RUN mkdir -p /home/appuser/.cache/torch_extensions /home/appuser/.cache \
+    && chown -R 1000:1000 /home/appuser
 
 # Copia os arquivos do projeto
 COPY . /app
 
 # Change ownership of the app directory
-RUN chown -R dockeruser:dockeruser /app
+RUN chown -R 1000:1000 /app
 
-# Switch to dockeruser
-USER dockeruser
+# Switch to appuser
+USER 1000
+
+# Set up environment to avoid getpwuid error
+ENV USER=appuser
 
 # Instala o pacote em modo editável
 RUN pip3 install -e .

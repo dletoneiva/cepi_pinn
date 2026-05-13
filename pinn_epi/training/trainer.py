@@ -60,14 +60,31 @@ class PINNTrainer:
         # Data loss
         y_pred_data = self.model(t_data)
         
+        # Check if model produced valid output
+        if y_pred_data.nelement() == 0:
+            raise ValueError("Model produced empty output. Check model initialization and input tensor dimensions.")
+        
         # Select only the target compartments for data loss calculation
         compartment_indices = [self.physics_model.compartment_names.index(comp) for comp in target_compartments]
+        
+        # Check if indices are valid
+        if not compartment_indices:
+            raise ValueError("No valid compartment indices found. Check target_compartments configuration.")
+            
+        # Check if y_pred_data has the expected number of columns
+        if y_pred_data.shape[1] < max(compartment_indices) + 1:
+            raise ValueError(f"Model output has {y_pred_data.shape[1]} compartments, but requested index {max(compartment_indices)}")
+            
         y_pred_selected = y_pred_data[:, compartment_indices]
         data_loss = torch.mean((y_pred_selected - y_data) ** 2)
 
         # Physics loss
         t_phys = collocation_points.clone().requires_grad_(True)
         y_pred_phys = self.model(t_phys)
+        
+        # Check if physics model produced valid output
+        if y_pred_phys.nelement() == 0:
+            raise ValueError("Model produced empty output for physics points. Check model initialization.")
         
         # Compute derivatives using autograd
         du_dt = []
@@ -98,13 +115,28 @@ class PINNTrainer:
         t_array = self.data['t']
         target_compartments = self.config.get('target_compartments', self.physics_model.compartment_names)
         
+        # Check if we have data
+        if len(t_array) == 0:
+            raise ValueError("No time data provided for training.")
+        
         # Extract target compartment data
         y_true_list = [self.data[comp] for comp in target_compartments]
         y_true_array = np.column_stack(y_true_list)
         
+        # Check if we have target data
+        if y_true_array.size == 0:
+            raise ValueError("No target compartment data found.")
+        
         # Convert to tensors
         t_tensor = torch.tensor(t_array, dtype=torch.float32).view(-1, 1).to(self.device)
         y_true_tensor = torch.tensor(y_true_array, dtype=torch.float32).to(self.device)
+        
+        # Check tensor dimensions
+        if t_tensor.nelement() == 0:
+            raise ValueError("Time tensor is empty after conversion.")
+            
+        if y_true_tensor.nelement() == 0:
+            raise ValueError("Target data tensor is empty after conversion.")
         
         # Optimizers
         optimizer_adam = torch.optim.Adam(self.model.parameters(), lr=self.config.get('adam_lr', 1e-3))
@@ -120,6 +152,10 @@ class PINNTrainer:
         # Sample collocation points
         t_min, t_max = t_array.min(), t_array.max()
         collocation_points = self.sample_collocation_points((t_min, t_max), n_collocation_points)
+        
+        # Check collocation points
+        if collocation_points.nelement() == 0:
+            raise ValueError("No collocation points generated.")
 
         # Adam phase
         for epoch in range(adam_epochs):

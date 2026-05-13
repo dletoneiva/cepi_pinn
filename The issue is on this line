@@ -1,1 +1,0 @@
-y_pred_selected = y_pred_data[:, compartment_indices]

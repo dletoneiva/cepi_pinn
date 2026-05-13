@@ -33,7 +33,7 @@ RUN pip3 install --no-cache-dir \
     flake8 \
     mlflow
 
-# Create user with UID 1000 to match host user
+# Create user with UID 1000 to match host user and properly add to passwd
 RUN useradd -m -u 1000 -s /bin/bash appuser
 
 # Cria o diretório de trabalho
@@ -62,7 +62,7 @@ COPY . /app
 RUN chown -R 1000:1000 /app
 
 # Switch to appuser
-USER 1000
+USER appuser
 
 # Set up environment to avoid getpwuid error
 ENV USER=appuser

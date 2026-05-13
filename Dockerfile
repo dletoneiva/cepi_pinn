@@ -64,6 +64,3 @@ EXPOSE 5000
 
 # Comando padrão
 CMD ["bash"]
-```
-
-pinn_epi/experiments/train_pinn.py

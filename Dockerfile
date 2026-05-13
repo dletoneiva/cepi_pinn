@@ -43,8 +43,17 @@ ENV HYDRA_FULL_ERROR=1
 # Cria symlink para python -> python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
+# Create user with UID 1000 to match host user
+RUN useradd -m -u 1000 -s /bin/bash appuser
+
 # Copia os arquivos do projeto
 COPY . /app
+
+# Change ownership of the app directory to appuser
+RUN chown -R appuser:appuser /app
+
+# Switch to appuser
+USER appuser
 
 # Instala o pacote em modo editável
 RUN pip3 install -e .
@@ -55,3 +64,6 @@ EXPOSE 5000
 
 # Comando padrão
 CMD ["bash"]
+```
+
+pinn_epi/experiments/train_pinn.py

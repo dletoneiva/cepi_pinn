@@ -118,6 +118,16 @@ def main(cfg: DictConfig) -> None:
     # Get model parameters and initial conditions
     model_params = get_model_parameters(cfg.compartmental.model)
     initial_conditions = get_initial_conditions(cfg.compartmental.model)
+    
+    # Debug: Print initial conditions
+    logger.info(f"Model type: {model_type}")
+    logger.info(f"Initial conditions from config: {initial_conditions}")
+    logger.info(f"Model compartments: {physics_model.compartment_names}")
+    
+    # Ensure we have the right number of initial conditions
+    if len(initial_conditions) != len(physics_model.compartment_names):
+        raise ValueError(f"Mismatch between initial conditions ({len(initial_conditions)}) and model compartments ({len(physics_model.compartment_names)})")
+    
     output_dim = get_output_size(cfg.compartmental.model)
     
     # Generate data if needed

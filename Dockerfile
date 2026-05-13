@@ -46,18 +46,17 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # Set environment variables to avoid getpwuid error
 ENV USER=dockeruser
 ENV HOME=/tmp
+ENV TORCH_HOME=/tmp/torch
 
-# Create necessary directories
-RUN mkdir -p /tmp/.cache/torch_extensions
+# Create necessary directories and set permissions
+RUN mkdir -p /tmp/.cache/torch_extensions /tmp/torch \
+    && chmod -R 777 /tmp
 
 # Copia os arquivos do projeto
 COPY . /app
 
 # Change ownership of the app directory
 RUN chown -R 1000:1000 /app
-
-# Set permissions for cache directories
-RUN chmod -R 777 /tmp
 
 # Instala o pacote em modo editável
 RUN pip3 install -e .

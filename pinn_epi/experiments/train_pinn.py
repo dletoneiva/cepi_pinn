@@ -52,23 +52,31 @@ def create_pinn_model(config: DictConfig, output_dim: int, initial_conditions: l
         Configured ModularPINN model
     """
     # Create backbone
+    # Use default values if not specified in config
+    input_dim = getattr(config.network, 'input_dim', 1)  # Time is typically 1D input
+    hidden_dims = getattr(config.network, 'hidden_dims', [16, 16])  # Default hidden layers
+    activation_name = getattr(config.network, 'activation', 'Tanh')  # Default activation
+    
+    # Convert activation string to actual class
+    activation = getattr(torch.nn, activation_name) if hasattr(torch.nn, activation_name) else torch.nn.Tanh
+    
     backbone = BaseMLP(
-        input_dim=config.network.input_dim,
-        hidden_dims=config.network.hidden_dims,
+        input_dim=input_dim,
+        hidden_dims=hidden_dims,
         output_dim=output_dim,
-        activation=getattr(torch.nn, config.network.activation) if hasattr(torch.nn, config.network.activation) else torch.nn.Tanh
+        activation=activation
     )
     
     # Create encoder if needed
     encoder = None
-    if config.network.get('use_time_normalization', False):
+    if getattr(config.network, 'use_time_normalization', False):
         # These would come from data or config
         t0, t1 = 0.0, 30.0  # Default values, should be configurable
         encoder = TimeNormalizationEncoder(t0=t0, t1=t1)
     
     # Create head
     head = None
-    if config.network.get('use_hard_ic', False):
+    if getattr(config.network, 'use_hard_ic', False):
         ic_tensor = torch.tensor(initial_conditions, dtype=torch.float32)
         # These would come from data or config
         t0, t1 = 0.0, 30.0  # Default values, should be configurable

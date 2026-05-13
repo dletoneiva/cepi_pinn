@@ -54,11 +54,28 @@ def create_pinn_model(config: DictConfig, output_dim: int, initial_conditions: l
     # Create backbone
     # Use default values if not specified in config
     input_dim = getattr(config.network, 'input_dim', 1)  # Time is typically 1D input
-    hidden_dims = getattr(config.network, 'hidden_dims', [16, 16])  # Default hidden layers
-    activation_name = getattr(config.network, 'activation', 'Tanh')  # Default activation
+    
+    # Handle network configuration properly
+    if hasattr(config.network, 'network'):
+        network_config = config.network.network
+        hidden_dims = [network_config.layer_size] * network_config.num_layers
+        activation_name = getattr(network_config, 'activation', 'Tanh')
+    else:
+        # Fallback to defaults
+        hidden_dims = getattr(config.network, 'hidden_dims', [16, 16])
+        activation_name = getattr(config.network, 'activation', 'Tanh')
     
     # Convert activation string to actual class
-    activation = getattr(torch.nn, activation_name) if hasattr(torch.nn, activation_name) else torch.nn.Tanh
+    activation_map = {
+        'tanh': torch.nn.Tanh,
+        'Tanh': torch.nn.Tanh,
+        'relu': torch.nn.ReLU,
+        'ReLU': torch.nn.ReLU,
+        'sigmoid': torch.nn.Sigmoid,
+        'Sigmoid': torch.nn.Sigmoid
+    }
+    
+    activation = activation_map.get(activation_name, torch.nn.Tanh)
     
     backbone = BaseMLP(
         input_dim=input_dim,

@@ -33,6 +33,9 @@ RUN pip3 install --no-cache-dir \
     flake8 \
     mlflow
 
+# Create user with UID 1000 to match host user
+RUN useradd -m -u 1000 -s /bin/bash dockeruser
+
 # Cria o diretório de trabalho
 WORKDIR /app
 
@@ -45,18 +48,21 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Set environment variables to avoid getpwuid error
 ENV USER=dockeruser
-ENV HOME=/tmp
-ENV TORCH_HOME=/tmp/torch
+ENV HOME=/home/dockeruser
+ENV TORCH_HOME=/home/dockeruser/.cache/torch
 
 # Create necessary directories and set permissions
-RUN mkdir -p /tmp/.cache/torch_extensions /tmp/torch \
-    && chmod -R 777 /tmp
+RUN mkdir -p /home/dockeruser/.cache/torch_extensions /home/dockeruser/.cache \
+    && chown -R dockeruser:dockeruser /home/dockeruser
 
 # Copia os arquivos do projeto
 COPY . /app
 
 # Change ownership of the app directory
-RUN chown -R 1000:1000 /app
+RUN chown -R dockeruser:dockeruser /app
+
+# Switch to dockeruser
+USER dockeruser
 
 # Instala o pacote em modo editável
 RUN pip3 install -e .

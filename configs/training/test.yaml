@@ -26,5 +26,5 @@ physics_params: {}
 
 # MLflow settings
 mlflow:
-  enabled: false
+  enabled: true  # Changed from false to true to enable MLflow logging
   experiment_name: "pinn_training_test"

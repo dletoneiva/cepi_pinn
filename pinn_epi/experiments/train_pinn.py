@@ -104,6 +104,11 @@ def main(cfg: DictConfig) -> None:
     
     # Get model class and parameters
     model_type = cfg.compartmental.model.type.lower()
+    
+    # Handle case where model_type might be the full class name
+    if model_type.endswith('model'):
+        model_type = model_type[:-5]  # Remove 'model' suffix
+    
     if model_type not in COMPARTMENTAL_MODEL_MAP:
         raise ValueError(f"Unsupported model type: {model_type}")
     

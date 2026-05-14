@@ -38,20 +38,21 @@ class PINNTrainer:
             n_points: Number of collocation points to sample.
 
         Returns:
-            torch.Tensor: Collocation points.
+            torch.Tensor: Collocation points with shape (n_points, 1).
         """
         t_min, t_max = t_range
-        # Sample random points in the interval
-        return (t_min + (t_max - t_min) * torch.rand(n_points)).to(self.device)
+        # Sample random points in the interval and reshape to (n_points, 1)
+        points = (t_min + (t_max - t_min) * torch.rand(n_points)).to(self.device)
+        return points.view(-1, 1)
 
     def compute_loss(self, t_data: torch.Tensor, y_data: torch.Tensor, collocation_points: torch.Tensor, target_compartments: list) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Compute the total loss for the PINN model.
 
         Args:
-            t_data: Time points for the empirical data.
-            y_data: Ground truth data for target compartments.
-            collocation_points: Collocation points for physics loss.
+            t_data: Time points for the empirical data with shape (N, 1).
+            y_data: Ground truth data for target compartments with shape (N, C).
+            collocation_points: Collocation points for physics loss with shape (M, 1).
             target_compartments: List of compartment names to train on.
 
         Returns:

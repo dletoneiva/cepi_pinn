@@ -95,7 +95,7 @@ def test_simple_si_training():
     # Test collocation point sampling
     print("Testing collocation point sampling...")
     collocation_points = trainer.sample_collocation_points((0, 10), 10)
-    assert collocation_points.shape == (10,), "Collocation points should have correct shape"
+    assert collocation_points.shape == (10, 1), "Collocation points should have correct shape (10, 1)"
     assert torch.all(collocation_points >= 0) and torch.all(collocation_points <= 10), "Collocation points should be in correct range"
     print("✓ Collocation point sampling works correctly")
     

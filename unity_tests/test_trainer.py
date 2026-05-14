@@ -60,7 +60,7 @@ def test_simple_si_training():
     # Create simple network (shallow and small for fast testing)
     print("Creating simple neural network...")
     backbone = BaseMLP(
-        input_dim=1,
+        input_dim=1,      # Time is 1-dimensional
         hidden_dims=[8],  # Very small hidden layer
         output_dim=2,     # SI model has 2 compartments
         activation=torch.nn.Tanh

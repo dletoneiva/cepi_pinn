@@ -3,6 +3,7 @@ import numpy as np
 import tempfile
 import os
 import sys
+import matplotlib.pyplot as plt
 from pinn_epi.models.networks import ModularPINN, BaseMLP
 from pinn_epi.models.physics import SIModel
 from pinn_epi.training.trainer import PINNTrainer
@@ -41,6 +42,41 @@ def generate_synthetic_si_data(beta=0.3, gamma=0.0, S0=0.99, I0=0.01, t_span=[0,
         'S': S,
         'I': I
     }
+
+def plot_training_results(model, data, save_path="training_results.png"):
+    """Plot the model predictions against the generated data."""
+    device = next(model.parameters()).device
+    t_array = data['t']
+    
+    # Generate predictions
+    t_tensor = torch.tensor(t_array, dtype=torch.float32).view(-1, 1).to(device)
+    with torch.no_grad():
+        predictions = model(t_tensor).cpu().numpy()
+    
+    # Extract predictions
+    S_pred = predictions[:, 0]
+    I_pred = predictions[:, 1]
+    
+    # Extract true data
+    S_true = data['S']
+    I_true = data['I']
+    
+    # Create plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(t_array, S_true, 'b-', label='True S', linewidth=2)
+    plt.plot(t_array, S_pred, 'b--', label='Predicted S', linewidth=2)
+    plt.plot(t_array, I_true, 'r-', label='True I', linewidth=2)
+    plt.plot(t_array, I_pred, 'r--', label='Predicted I', linewidth=2)
+    plt.xlabel('Time')
+    plt.ylabel('Population')
+    plt.title('SI Model: True vs Predicted')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+    
+    print(f"✓ Training results plot saved to {save_path}")
 
 def test_simple_si_training():
     """Test PINN training on a simple SI model with shallow network."""
@@ -180,6 +216,9 @@ def test_physics_consistency():
     
     # Train the model
     trainer.train()
+    
+    # Plot training results
+    plot_training_results(model, data, "physics_consistency_results.png")
     
     # Test physics consistency at collocation points
     t_min, t_max = data['t'].min(), data['t'].max()

@@ -133,6 +133,117 @@ def test_simple_si_training():
     
     print("\nAll tests passed! PINNTrainer is working correctly.")
 
+def test_physics_consistency():
+    """Test that the trained model satisfies the physics equations."""
+    
+    # Set device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Generate synthetic data
+    data = generate_synthetic_si_data(beta=0.3, gamma=0.0, S0=0.99, I0=0.01, t_span=[0, 10], num_points=20)
+    
+    # Create SI physics model
+    physics_model = SIModel()
+    
+    # Create simple network
+    backbone = BaseMLP(
+        input_dim=1,
+        hidden_dims=[8],
+        output_dim=2,
+        activation=torch.nn.Tanh
+    )
+    
+    # Create PINN model
+    model = ModularPINN(backbone=backbone)
+    model.to(device)
+    
+    # Training configuration with more epochs for better physics consistency
+    config = {
+        'target_compartments': ['S', 'I'],
+        'physics_params': {'beta': 0.3, 'gamma': 0.0},
+        'data_weight': 1.0,
+        'physics_weight': 1.0,
+        'adam_lr': 0.01,
+        'lbfgs_max_iter': 3,
+        'adam_epochs': 10,
+        'n_collocation_points': 15,
+        'log_interval': 5
+    }
+    
+    # Create trainer
+    trainer = PINNTrainer(
+        model=model,
+        physics_model=physics_model,
+        data=data,
+        config=config
+    )
+    
+    # Train the model
+    trainer.train()
+    
+    # Test physics consistency at collocation points
+    t_min, t_max = data['t'].min(), data['t'].max()
+    collocation_points = trainer.sample_collocation_points((t_min, t_max), 10)
+    
+    # Compute physics residuals
+    t_phys = collocation_points.clone().requires_grad_(True)
+    y_pred_phys = model(t_phys)
+    
+    # Compute derivatives using autograd
+    du_dt = []
+    for i in range(y_pred_phys.shape[1]):
+        grad = torch.autograd.grad(
+            y_pred_phys[:, i], 
+            t_phys, 
+            grad_outputs=torch.ones_like(y_pred_phys[:, i]),
+            create_graph=True
+        )[0]
+        du_dt.append(grad)
+    du_dt = torch.cat(du_dt, dim=1)
+    
+    # Get expected physics residuals
+    physics_residuals = physics_model.get_derivatives(t_phys, y_pred_phys, config.get('physics_params', {}))
+    
+    # Check that residuals are small (physics is satisfied)
+    residual_error = torch.mean((du_dt - physics_residuals) ** 2)
+    print(f"Physics residual error: {residual_error.item():.6f}")
+    
+    # The physics should be reasonably satisfied
+    assert residual_error.item() < 1.0, f"Physics residual error {residual_error.item():.6f} is too large"
+    print("✓ Physics consistency test passed")
+
+def test_network_physics_integration():
+    """Test integration between network and physics model."""
+    
+    # Create a simple network
+    backbone = BaseMLP(
+        input_dim=1,
+        hidden_dims=[4],
+        output_dim=2,
+        activation=torch.nn.Tanh
+    )
+    
+    model = ModularPINN(backbone=backbone)
+    
+    # Create SI physics model
+    physics_model = SIModel()
+    
+    # Test that the network output dimensions match physics model expectations
+    test_input = torch.tensor([[0.0], [5.0], [10.0]])  # 3 time points
+    output = model(test_input)
+    
+    # Check output shape
+    assert output.shape == (3, 2), f"Network output shape {output.shape} doesn't match expected (3, 2)"
+    
+    # Check that physics model can process the output
+    params = {'beta': 0.3, 'gamma': 0.0}
+    derivatives = physics_model.get_derivatives(test_input, output, params)
+    
+    # Check derivatives shape
+    assert derivatives.shape == output.shape, f"Derivatives shape {derivatives.shape} doesn't match output shape {output.shape}"
+    
+    print("✓ Network and physics integration test passed")
+
 if __name__ == "__main__":
     # Set up temporary directory for MLflow (if needed)
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -140,7 +251,9 @@ if __name__ == "__main__":
         
         try:
             test_simple_si_training()
-            print("\n🎉 Test completed successfully!")
+            test_physics_consistency()
+            test_network_physics_integration()
+            print("\n🎉 All tests completed successfully!")
         except Exception as e:
             print(f"\n❌ Test failed with error: {e}")
             raise

@@ -247,7 +247,7 @@ def test_network_physics_integration():
 if __name__ == "__main__":
     # Set up temporary directory for MLflow (if needed)
     with tempfile.TemporaryDirectory() as temp_dir:
-        os.environ['MLFLOW_TRACKING_URI'] = f"sqlite:///{os.path.join(temp_dir, 'mlflow.db')}"
+        os.environ['MLFLOW_TRACKING_URI'] = f"file:///{os.path.join(temp_dir, 'mlruns')}"
         
         try:
             test_simple_si_training()

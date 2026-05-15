@@ -129,6 +129,30 @@ def get_output_size(config: Dict[str, Any]) -> int:
     return config.get('compartmental', {}).get('model', {}).get('output_size', 0)
 
 
+def get_network_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract network configuration from configuration.
+    
+    Args:
+        config: Configuration dictionary
+        
+    Returns:
+        Network configuration dictionary
+    """
+    return config.get('network', {})
+
+
+def get_training_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract training configuration from configuration.
+    
+    Args:
+        config: Configuration dictionary
+        
+    Returns:
+        Training configuration dictionary
+    """
+    return config.get('training', {})
+
+
 def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     """Run a simulation based on the provided configuration.
     
@@ -254,6 +278,13 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         
         result["data_save_path"] = hydra_output_dir
         logger.info(f"Data saved to: {hydra_output_dir}")
+    
+    # Extract network and training configurations
+    network_config = get_network_config(config_dict)
+    training_config = get_training_config(config_dict)
+    
+    result["network_config"] = network_config
+    result["training_config"] = training_config
     
     logger.info("Simulation run completed successfully")
     return result

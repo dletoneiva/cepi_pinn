@@ -28,9 +28,9 @@ services:
     
     command: >
       bash -c "
-        sudo chown -R appuser:appuser /app/mlflow || true &&
-        mkdir -p /app/mlflow/artifacts &&
-        touch /app/mlflow/mlflow.db &&
+        sudo mkdir -p /app/mlflow/artifacts &&
+        sudo chown -R appuser:appuser /app/mlflow ||
+        (mkdir -p /app/mlflow/artifacts && touch /app/mlflow/mlflow.db) &&
         mlflow server --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /app/mlflow/artifacts --host 0.0.0.0 --port 5000 &
         sleep 3 &&
         bash

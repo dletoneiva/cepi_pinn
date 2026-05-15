@@ -59,10 +59,7 @@ ENV HYDRA_FULL_ERROR=1
 # Cria symlink para python -> python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
-# Copia os arquivos do projeto
-COPY . /app
-
-# Create mlflow directories
+# Create mlflow directories with proper permissions
 RUN mkdir -p /app/mlflow/artifacts \
     && chown -R 1000:1000 /app/mlflow
 

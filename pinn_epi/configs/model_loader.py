@@ -1,17 +1,10 @@
 """Load compartmental models from configuration."""
 
 from typing import Dict, Any, Union
-import numpy as np
-import os
-from datetime import datetime
-from omegaconf import DictConfig, OmegaConf
-import hydra
 import importlib
 import logging
+from omegaconf import DictConfig, OmegaConf
 
-from pinn_epi.analysis.plotting import plot_compartmental_solution
-from pinn_epi.analysis.evaluator import solve_compartmental_model
-from pinn_epi.analysis.data_wrangler import save_simulation_data
 from pinn_epi.constants import COMPARTMENTAL_MODEL_REGISTRY
 
 # Set up logging
@@ -153,138 +146,37 @@ def get_training_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return config.get('training', {})
 
 
-def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
-    """Run a simulation based on the provided configuration.
+def get_simulation_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract simulation configuration from configuration.
     
     Args:
-        config: Configuration dictionary from Hydra
+        config: Configuration dictionary
         
     Returns:
-        Dictionary containing the model, trajectories, and figure path (if saved)
+        Simulation configuration dictionary
     """
-    logger.info("Starting simulation from configuration")
+    return config.get('simulation', {})
+
+
+def get_plotting_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract plotting configuration from configuration.
     
-    # Convert DictConfig to regular dict for compatibility
-    config_dict = OmegaConf.to_container(config, resolve=True)
-    
-    # Validate configuration
-    validate_model_config(config_dict)
-    
-    # Create model
-    model = create_model_from_config(config_dict)
-    logger.info(f"Created model: {type(model).__name__}")
-    
-    # Extract simulation parameters
-    t_span = config_dict["simulation"]["t_span"]
-    y0 = config_dict["compartmental"]["model"]["initial_conditions"]  # Get from model config
-    params = config_dict["compartmental"]["model"]["parameters"]
-    t_eval_points = config_dict["simulation"]["t_eval_points"]
-    
-    logger.info(f"Simulation parameters - t_span: {t_span}, t_eval_points: {t_eval_points}")
-    logger.info(f"Model parameters: {params}")
-    logger.info(f"Initial conditions: {y0}")
-    
-    # Create t_eval
-    t_eval = np.linspace(t_span[0], t_span[1], t_eval_points)
-    
-    # Solve ODE
-    logger.info("Solving ODE system")
-    trajectories = solve_compartmental_model(
-        model=model,
-        t_span=t_span,
-        y0=y0,
-        params=params,
-        t_eval=t_eval,
-    )
-    logger.info("ODE system solved successfully")
-    
-    # Plot solution if requested
-    result = {
-        "model": model,
-        "trajectories": trajectories,
-        "t": t_eval
-    }
-    
-    # Handle plotting
-    plotting_config = config_dict.get("plotting", {})
-    show_plot = plotting_config.get("show_plot", True)
-    save_plot = plotting_config.get("save_plot", False)
-    
-    logger.info(f"Plotting configuration - show_plot: {show_plot}, save_plot: {save_plot}")
-    
-    # Determine save path if saving is requested
-    save_path = None
-    if save_plot:
-        # Use Hydra's output directory
-        hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_type = config_dict["compartmental"]["model"]["type"]
-        save_path = f"{hydra_output_dir}/{model_type}_simulation_{timestamp}.pdf"
+    Args:
+        config: Configuration dictionary
         
-        # Ensure the directory exists
-        os.makedirs(hydra_output_dir, exist_ok=True)
-        logger.info(f"Figure will be saved to: {save_path}")
+    Returns:
+        Plotting configuration dictionary
+    """
+    return config.get('plotting', {})
+
+
+def get_data_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract data configuration from configuration.
     
-    # Generate title based on model compartments if not provided
-    title = plotting_config.get("title")
-    if title == "Compartmental Model Simulation":  # Default title, replace with model-specific one
-        # Get compartment names from the model
-        compartment_names = model.compartment_names
-        compartments_str = "".join(compartment_names)
-        title = f"{compartments_str} differential equation solutions"
-    
-    fig, ax = plot_compartmental_solution(
-        t=t_eval,
-        trajectories=trajectories,
-        title=title,
-        show=show_plot,
-        save_path=save_path,
-        model_params=params,
-        initial_conditions=y0,
-    )
-    result["figure"] = fig
-    result["axes"] = ax
-    
-    if save_path:
-        result["save_path"] = save_path
-        logger.info(f"Figure saved to: {save_path}")
-    
-    # Handle data saving
-    data_config = config_dict.get("data", {})
-    save_data = data_config.get("save_data", True)
-    
-    logger.info(f"Data saving configuration - save_data: {save_data}")
-    
-    if save_data:
-        # Use Hydra's output directory for data as well
-        hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-        timestamp = datetime.now().strftime("%Y%mdd_%H%M%S")
-        model_type = config_dict["compartmental"]["model"]["type"]
+    Args:
+        config: Configuration dictionary
         
-        # Ensure the directory exists
-        os.makedirs(hydra_output_dir, exist_ok=True)
-        
-        # Save simulation data
-        logger.info(f"Saving simulation data to: {hydra_output_dir}")
-        save_simulation_data(
-            trajectories=trajectories,
-            model_params=params,
-            initial_conditions=y0,
-            compartment_names=model.compartment_names,
-            save_dir=hydra_output_dir,
-            t_eval=t_eval,
-            file_prefix=f"{model_type}_simulation_{timestamp}"
-        )
-        
-        result["data_save_path"] = hydra_output_dir
-        logger.info(f"Data saved to: {hydra_output_dir}")
-    
-    # Extract network and training configurations
-    network_config = get_network_config(config_dict)
-    training_config = get_training_config(config_dict)
-    
-    result["network_config"] = network_config
-    result["training_config"] = training_config
-    
-    logger.info("Simulation run completed successfully")
-    return result
+    Returns:
+        Data configuration dictionary
+    """
+    return config.get('data', {})

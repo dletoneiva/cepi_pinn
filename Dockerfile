@@ -52,11 +52,6 @@ RUN pip3 install --no-cache-dir \
 # Cria o diretório de trabalho
 WORKDIR /app
 
-# Create mlflow directories with proper permissions while still root
-RUN mkdir -p /app/mlflow/artifacts \
-    && touch /app/mlflow/mlflow.db \
-    && chown -R 1000:1000 /app/mlflow
-
 # Adiciona o diretório atual ao PYTHONPATH
 ENV PYTHONPATH=/app:$PYTHONPATH
 ENV HYDRA_FULL_ERROR=1

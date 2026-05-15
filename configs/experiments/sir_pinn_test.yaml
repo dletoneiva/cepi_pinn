@@ -1,0 +1,43 @@
+# Complete experiment configuration for SIR model PINN training
+defaults:
+  - base
+  - _self_
+
+# Override specific settings for this experiment
+compartmental:
+  model:
+    type: "SIRModel"
+    parameters:
+      beta: 0.3
+      gamma: 0.1
+    initial_conditions: [0.99, 0.01, 0.0]
+    output_size: 3
+
+training:
+  data:
+    source: "generated"
+    t_span: [0, 50]
+    num_points: 200
+  adam_epochs: 500
+  adam_lr: 0.001
+  lbfgs_max_iter: 100
+  n_collocation_points: 100
+  log_interval: 50
+  target_compartments: ["S", "I", "R"]
+  physics_params:
+    beta: 0.3
+    gamma: 0.1
+
+network:
+  network:
+    num_layers: 3
+    layer_size: 32
+    activation: "tanh"
+  use_time_normalization: false
+  use_hard_ic: false
+
+# Experiment metadata
+experiment:
+  name: "sir_pinn_test"
+  description: "SIR model PINN training test"
+  seed: 42

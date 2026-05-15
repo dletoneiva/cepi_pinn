@@ -1,0 +1,1 @@
+python pinn_epi/experiments/train_compartmental_pinn.py --config-name=experiments/sir_pinn_test

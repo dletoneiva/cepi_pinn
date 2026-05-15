@@ -12,20 +12,24 @@ RUN apt-get update && apt-get install -y \
     sudo \
     && rm -rf /var/lib/apt/lists/*
 
+# Garante a criação do grupo e usuário com IDs explícitos
 RUN groupadd -g 1000 appuser && \
-    useradd -m -u 1000 -g appuser -s /bin/bash appuser && \
+    useradd -m -u 1000 -g 1000 -s /bin/bash appuser && \
     echo "appuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# Set environment variables to avoid getpwuid error
-ENV USER=appuser
-ENV HOME=/home/appuser
-ENV TORCH_HOME=/home/appuser/.cache/torch
+# Criar pastas de sistema e cache ANTES de mudar o usuário
+RUN mkdir -p /home/appuser/.cache/torch /home/appuser/.config/matplotlib && \
+    chown -R 1000:1000 /home/appuser
 
-# Create necessary directories and set permissions
-RUN mkdir -p /home/appuser/.cache/torch_extensions /home/appuser/.cache /home/appuser/.config \
-    && chown -R 1000:1000 /home/appuser
+# Preparar o diretório de trabalho
+WORKDIR /app
 
-RUN mkdir -p mlflow && chmod 777 mlflow
+# O TRUQUE: Pré-criar a pasta do MLflow na imagem
+# Mesmo que o volume sobrescreva, isso ajuda o Docker a entender o mapeamento inicial
+RUN mkdir -p /app/mlflow/artifacts && \
+    chown -R 1000:1000 /app
+
+USER appuser
 
 # Set MPLCONFIGDIR to avoid matplotlib permission issues
 ENV MPLCONFIGDIR=/home/appuser/.config/matplotlib
@@ -72,6 +76,13 @@ RUN mkdir -p /home/appuser/.config/matplotlib
 
 # Instala o pacote em modo editável
 RUN pip3 install -e .
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+USER root
+RUN chmod +x /usr/local/bin/entrypoint.sh
+USER appuser
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # Expondo a porta para o Jupyter Lab (opcional)
 EXPOSE 8888

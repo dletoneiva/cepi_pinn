@@ -1,4 +1,4 @@
-"""Run compartmental model simulations from configuration files."""
+"""Run simulations from configuration files."""
 
 import hydra
 from omegaconf import DictConfig, OmegaConf

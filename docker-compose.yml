@@ -1,21 +1,17 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: phys-sir-env
+    build: .
+    image: pinn-research-env
     working_dir: /app
     volumes:
       - .:/app:rw
-      - ./mlflow:/app/mlflow
+      - mlflow_data:/app/mlflow_logs
     environment:
-      - HOME=/home/appuser
-      - XDG_CACHE_HOME=/home/appuser/.cache
-      - XDG_CONFIG_HOME=/home/appuser/.config
-      - MLFLOW_TRACKING_URI=sqlite:///mlflow/mlflow.db
+      - MLFLOW_TRACKING_URI=sqlite:////app/mlflow_logs/mlflow.db
+      - HYDRA_FULL_ERROR=1
       - USER=appuser
-    tty: true
-    stdin_open: true
+    ports:
+      - "5000:5000"
     deploy:
       resources:
         limits:
@@ -25,16 +21,18 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    
+    tty: true
+    stdin_open: true
     command: >
       bash -c "
-        mkdir -p /app/mlflow/artifacts &&
-        touch /app/mlflow/mlflow.db &&
-        mlflow server --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /app/mlflow/artifacts --host 0.0.0.0 --port 5000 &
-        sleep 2 &&
-        bash
-      "
+        mkdir -p /app/mlflow_logs/artifacts &&
+        mlflow server \
+          --backend-store-uri sqlite:////app/mlflow_logs/mlflow.db \
+          --default-artifact-root /app/mlflow_logs/artifacts \
+          --host 0.0.0.0 --port 5000 &
+        echo '🚀 MLflow Server iniciado na porta 5000' &&
+        bash"
     user: "1000:1000"
-    ports:
-      - "8888:8888"
-      - "5000:5000"
+
+volumes:
+  mlflow_data:

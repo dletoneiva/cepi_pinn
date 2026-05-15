@@ -12,8 +12,8 @@ RUN apt-get update && apt-get install -y \
     sudo \
     && rm -rf /var/lib/apt/lists/*
 
-# Create user with UID 1000 to match host user and properly add to passwd
-RUN useradd -m -u 1000 -s /bin/bash appuser && \
+RUN groupadd -g 1000 appuser && \
+    useradd -m -u 1000 -g appuser -s /bin/bash appuser && \
     echo "appuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Set environment variables to avoid getpwuid error
@@ -24,6 +24,8 @@ ENV TORCH_HOME=/home/appuser/.cache/torch
 # Create necessary directories and set permissions
 RUN mkdir -p /home/appuser/.cache/torch_extensions /home/appuser/.cache /home/appuser/.config \
     && chown -R 1000:1000 /home/appuser
+
+RUN mkdir -p mlflow && chmod 777 mlflow
 
 # Set MPLCONFIGDIR to avoid matplotlib permission issues
 ENV MPLCONFIGDIR=/home/appuser/.config/matplotlib

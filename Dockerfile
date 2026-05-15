@@ -30,8 +30,7 @@ RUN pip3 install --no-cache-dir \
     pytest \
     black \
     isort \
-    flake8 \
-    mlflow
+    flake8
 
 # Create user with UID 1000 to match host user and properly add to passwd
 RUN useradd -m -u 1000 -s /bin/bash appuser
@@ -60,6 +59,10 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Copia os arquivos do projeto
 COPY . /app
+
+# Create mlflow directories
+RUN mkdir -p /app/mlflow/artifacts \
+    && chown -R 1000:1000 /app/mlflow
 
 # Change ownership of the app directory
 RUN chown -R 1000:1000 /app

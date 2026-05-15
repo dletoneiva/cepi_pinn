@@ -7,7 +7,7 @@ services:
     working_dir: /app
     volumes:
       - .:/app
-      - ./mlflow:/app/mlflow  # Add this line to persist MLflow data
+      - ./mlflow:/app/mlflow
     environment:
       - HOME=/home/appuser
       - XDG_CACHE_HOME=/home/appuser/.cache
@@ -26,13 +26,14 @@ services:
               count: all
               capabilities: [gpu]
     
-    # Remove the simple bash command and replace with a startup script
     command: >
       bash -c "
+        mkdir -p ./mlflow/artifacts &&
         mlflow server --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root ./mlflow/artifacts --host 0.0.0.0 --port 5000 &
+        sleep 5 &&
         bash
       "
     user: "1000:1000"
     ports:
       - "8888:8888"
-      - "5000:5000"  # Keep this for MLflow UI access
+      - "5000:5000"

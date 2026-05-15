@@ -194,12 +194,17 @@ def main(cfg: DictConfig) -> None:
     # Create PINN model
     pinn_model = create_pinn_model(cfg, output_dim, initial_conditions)
     
+    # Update training config with physics parameters
+    training_config = OmegaConf.to_container(cfg.training, resolve=True)
+    if 'physics_params' in training_config and not training_config['physics_params']:
+        training_config['physics_params'] = model_params
+    
     # Initialize trainer
     trainer = PINNTrainer(
         model=pinn_model,
         physics_model=physics_model,
         data=data,
-        config=OmegaConf.to_container(cfg.training, resolve=True)
+        config=training_config
     )
     
     # Train the model

@@ -5,9 +5,9 @@ services:
     working_dir: /app
     volumes:
       - .:/app:rw
-      - mlflow_data:/app/mlflow_logs
+      - mlflow_data:/mlflow_data # Movido para fora de /app para evitar conflitos
     environment:
-      - MLFLOW_TRACKING_URI=sqlite:////app/mlflow_logs/mlflow.db
+      - MLFLOW_TRACKING_URI=sqlite:////mlflow_data/mlflow.db
       - HYDRA_FULL_ERROR=1
       - USER=appuser
     ports:
@@ -23,16 +23,13 @@ services:
               capabilities: [gpu]
     tty: true
     stdin_open: true
+    # Comando limpo em uma linha para o Bash não se perder
     command: >
-      bash -c "
-        mkdir -p /app/mlflow_logs/artifacts &&
-        mlflow server \
-          --backend-store-uri sqlite:////app/mlflow_logs/mlflow.db \
-          --default-artifact-root /app/mlflow_logs/artifacts \
-          --host 0.0.0.0 --port 5000 &
-        echo '🚀 MLflow Server iniciado na porta 5000' &&
-        bash"
+      bash -c "mkdir -p /mlflow_data/artifacts && 
+      mlflow server --backend-store-uri sqlite:////mlflow_data/mlflow.db --default-artifact-root /mlflow_data/artifacts --host 0.0.0.0 --port 5000 & 
+      echo '🚀 MLflow iniciado em http://localhost:5000' && 
+      bash"
     user: "1000:1000"
 
 volumes:
-  mlflow_data:
+  mlflow_data: # O Docker gerencia esse volume de forma independente e segura

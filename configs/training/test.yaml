@@ -1,13 +1,7 @@
 # Training configuration for testing
 
-# Data configuration
-data:
-  source: "generated"  # or "file"
-  file_path: ""  # path to data file if source is "file"
-  t_span: [0, 30]  # time span for generated data
-  num_points: 100  # number of points for generated data
+run_training: true
 
-# Training parameters
 adam_epochs: 100
 adam_lr: 0.001
 lbfgs_max_iter: 50
@@ -26,5 +20,5 @@ physics_params: {}
 
 # MLflow settings
 mlflow:
-  enabled: true  # Changed from false to true to enable MLflow logging
+  enabled: true
   experiment_name: "pinn_training_test"

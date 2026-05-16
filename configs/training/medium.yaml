@@ -12,9 +12,6 @@ log_interval: 100
 data_weight: 1.0
 physics_weight: 1.0
 
-# Target compartments (which compartments to train on)
-target_compartments: ["S", "I", "R"]
-
 # Physics parameters (will be passed to the physics model)
 physics_params: {}
 

@@ -222,5 +222,3 @@ class PINNTrainer:
             # End MLflow run if we started it
             if mlflow.active_run():
                 mlflow.end_run()
-
-# Example usage moved to experiments/train_pinn.py

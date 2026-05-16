@@ -24,6 +24,8 @@ from pinn_epi.configs.model_loader import (
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.plotting import plot_compartmental_solution
 from pinn_epi.analysis.data_wrangler import save_simulation_data
+from pinn_epi.training.trainer import PINNTrainer
+from pinn_epi.models.networks import ModularPINN
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -184,6 +186,87 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         
         result["network_config"] = network_config
         result["training_config"] = training_config
+        
+        # Run PINN training if requested
+        if training_config.get("run_training", False):
+            logger.info("Starting PINN training with generated simulation data")
+            
+            # Prepare data for training
+            training_data = {
+                't': t_eval
+            }
+            
+            # Add compartment data
+            target_compartments = training_config.get("target_compartments", model.compartment_names)
+            for comp in target_compartments:
+                training_data[comp] = trajectories[comp].flatten()
+            
+            # Create PINN model
+            input_dim = 1  # time dimension
+            output_dim = len(model.compartment_names)
+            
+            # Create network backbone
+            backbone_config = network_config.get("backbone", {})
+            hidden_dims = backbone_config.get("hidden_dims", [50, 50, 50])
+            activation_name = backbone_config.get("activation", "Tanh")
+            
+            # Map activation name to class
+            activation_map = {
+                "Tanh": torch.nn.Tanh,
+                "ReLU": torch.nn.ReLU,
+                "Sigmoid": torch.nn.Sigmoid
+            }
+            activation = activation_map.get(activation_name, torch.nn.Tanh)
+            
+            from pinn_epi.models.networks import BaseMLP
+            
+            backbone = BaseMLP(
+                input_dim=input_dim,
+                hidden_dims=hidden_dims,
+                output_dim=output_dim,
+                activation=activation
+            )
+            
+            # Create encoder if specified
+            encoder = None
+            if network_config.get("use_time_normalization", False):
+                from pinn_epi.models.networks import TimeNormalizationEncoder
+                encoder = TimeNormalizationEncoder(
+                    t0=float(t_span[0]),
+                    t1=float(t_span[1])
+                )
+            
+            # Create initial condition head if specified
+            head = None
+            if network_config.get("use_hard_ic", False):
+                from pinn_epi.models.networks import HardICHead
+                initial_conditions_tensor = torch.tensor(y0, dtype=torch.float32)
+                head = HardICHead(
+                    initial_conditions=initial_conditions_tensor,
+                    t0=float(t_span[0]),
+                    t1=float(t_span[1])
+                )
+            
+            # Create modular PINN
+            pinn_model = ModularPINN(
+                backbone=backbone,
+                head=head,
+                encoder=encoder
+            )
+            
+            # Create trainer
+            trainer = PINNTrainer(
+                model=pinn_model,
+                physics_model=model,  # The compartmental model for physics loss
+                data=training_data,
+                config=training_config
+            )
+            
+            # Run training
+            trainer.train()
+            
+            result["trained_pinn"] = pinn_model
+            logger.info("PINN training completed successfully")
         
         logger.info("Simulation run completed successfully")
         return result

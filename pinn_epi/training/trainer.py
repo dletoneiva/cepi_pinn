@@ -100,8 +100,9 @@ class PINNTrainer:
             du_dt.append(grad)
         du_dt = torch.cat(du_dt, dim=1)
         
-        # Get physics residuals
-        physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, self.config.get('physics_params', {}))
+        # Get physics residuals - use physics_params from config if provided, otherwise use empty dict
+        physics_params = self.config.get('physics_params', {})
+        physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, physics_params)
         physics_loss = torch.mean((du_dt - physics_residuals) ** 2)
 
         # Total loss

@@ -7,6 +7,7 @@ from typing import Dict, Any, Tuple, Optional
 from pinn_epi.models.networks import ModularPINN
 from pinn_epi.models.physics import CompartmentalModel
 import mlflow
+import mlflow.pytorch
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -112,78 +113,113 @@ class PINNTrainer:
         """
         Train the PINN model using Adam and L-BFGS optimizers.
         """
-        # Prepare data
-        t_array = self.data['t']
-        target_compartments = self.config.get('target_compartments', self.physics_model.compartment_names)
-        
-        # Check if we have data
-        if len(t_array) == 0:
-            raise ValueError("No time data provided for training.")
-        
-        # Extract target compartment data
-        y_true_list = [self.data[comp] for comp in target_compartments]
-        y_true_array = np.column_stack(y_true_list)
-        
-        # Check if we have target data
-        if y_true_array.size == 0:
-            raise ValueError("No target compartment data found.")
-        
-        # Convert to tensors
-        t_tensor = torch.tensor(t_array, dtype=torch.float32).view(-1, 1).to(self.device)
-        y_true_tensor = torch.tensor(y_true_array, dtype=torch.float32).to(self.device)
-        
-        # Check tensor dimensions
-        if t_tensor.nelement() == 0:
-            raise ValueError("Time tensor is empty after conversion.")
+        # Start MLflow run if not already active
+        if not mlflow.active_run():
+            mlflow.start_run()
             
-        if y_true_tensor.nelement() == 0:
-            raise ValueError("Target data tensor is empty after conversion.")
-        
-        # Optimizers
-        optimizer_adam = torch.optim.Adam(self.model.parameters(), lr=self.config.get('adam_lr', 1e-3))
-        optimizer_lbfgs = torch.optim.LBFGS(self.model.parameters(), 
-                                          max_iter=self.config.get('lbfgs_max_iter', 100), 
-                                          line_search_fn="strong_wolfe")
+        try:
+            # Log model and training parameters
+            mlflow.log_params({
+                "model_type": type(self.physics_model).__name__,
+                "compartment_names": str(self.physics_model.compartment_names),
+                "adam_lr": self.config.get('adam_lr', 1e-3),
+                "adam_epochs": self.config.get('adam_epochs', 5000),
+                "n_collocation_points": self.config.get('n_collocation_points', 100),
+                "data_weight": self.config.get('data_weight', 1.0),
+                "physics_weight": self.config.get('physics_weight', 1.0),
+                "target_compartments": str(self.config.get('target_compartments', self.physics_model.compartment_names))
+            })
+            
+            # Log physics parameters if available
+            physics_params = self.config.get('physics_params', {})
+            if physics_params:
+                mlflow.log_params(physics_params)
+            
+            # Prepare data
+            t_array = self.data['t']
+            target_compartments = self.config.get('target_compartments', self.physics_model.compartment_names)
+            
+            # Check if we have data
+            if len(t_array) == 0:
+                raise ValueError("No time data provided for training.")
+            
+            # Extract target compartment data
+            y_true_list = [self.data[comp] for comp in target_compartments]
+            y_true_array = np.column_stack(y_true_list)
+            
+            # Check if we have target data
+            if y_true_array.size == 0:
+                raise ValueError("No target compartment data found.")
+            
+            # Convert to tensors
+            t_tensor = torch.tensor(t_array, dtype=torch.float32).view(-1, 1).to(self.device)
+            y_true_tensor = torch.tensor(y_true_array, dtype=torch.float32).to(self.device)
+            
+            # Check tensor dimensions
+            if t_tensor.nelement() == 0:
+                raise ValueError("Time tensor is empty after conversion.")
+                
+            if y_true_tensor.nelement() == 0:
+                raise ValueError("Target data tensor is empty after conversion.")
+            
+            # Optimizers
+            optimizer_adam = torch.optim.Adam(self.model.parameters(), lr=self.config.get('adam_lr', 1e-3))
+            optimizer_lbfgs = torch.optim.LBFGS(self.model.parameters(), 
+                                              max_iter=self.config.get('lbfgs_max_iter', 100), 
+                                              line_search_fn="strong_wolfe")
 
-        # Training parameters
-        adam_epochs = self.config.get('adam_epochs', 5000)
-        n_collocation_points = self.config.get('n_collocation_points', 100)
-        log_interval = self.config.get('log_interval', 100)
-        
-        # Sample collocation points
-        t_min, t_max = t_array.min(), t_array.max()
-        collocation_points = self.sample_collocation_points((t_min, t_max), n_collocation_points)
-        
-        # Check collocation points
-        if collocation_points.nelement() == 0:
-            raise ValueError("No collocation points generated.")
+            # Training parameters
+            adam_epochs = self.config.get('adam_epochs', 5000)
+            n_collocation_points = self.config.get('n_collocation_points', 100)
+            log_interval = self.config.get('log_interval', 100)
+            
+            # Sample collocation points
+            t_min, t_max = t_array.min(), t_array.max()
+            collocation_points = self.sample_collocation_points((t_min, t_max), n_collocation_points)
+            
+            # Check collocation points
+            if collocation_points.nelement() == 0:
+                raise ValueError("No collocation points generated.")
 
-        # Adam phase
-        for epoch in range(adam_epochs):
-            optimizer_adam.zero_grad()
-            total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, y_true_tensor, collocation_points, target_compartments)
-            total_loss.backward()
-            optimizer_adam.step()
+            # Adam phase
+            for epoch in range(adam_epochs):
+                optimizer_adam.zero_grad()
+                total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, y_true_tensor, collocation_points, target_compartments)
+                total_loss.backward()
+                optimizer_adam.step()
 
-            if epoch % log_interval == 0:
-                logger.info(f"Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}")
-                # Log metrics with MLflow
-                try:
-                    mlflow.log_metric("total_loss", total_loss.item(), step=epoch)
-                    mlflow.log_metric("data_loss", data_loss.item(), step=epoch)
-                    mlflow.log_metric("physics_loss", physics_loss.item(), step=epoch)
-                except Exception as e:
-                    logger.warning(f"Failed to log metrics to MLflow: {e}")
+                if epoch % log_interval == 0:
+                    logger.info(f"Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}")
+                    # Log metrics with MLflow
+                    try:
+                        mlflow.log_metrics({
+                            "total_loss": total_loss.item(),
+                            "data_loss": data_loss.item(),
+                            "physics_loss": physics_loss.item()
+                        }, step=epoch)
+                    except Exception as e:
+                        logger.warning(f"Failed to log metrics to MLflow: {e}")
 
-        # L-BFGS phase
-        def closure():
-            optimizer_lbfgs.zero_grad()
-            total_loss, _, _ = self.compute_loss(t_tensor, y_true_tensor, collocation_points, target_compartments)
-            total_loss.backward()
-            return total_loss
+            # L-BFGS phase
+            def closure():
+                optimizer_lbfgs.zero_grad()
+                total_loss, _, _ = self.compute_loss(t_tensor, y_true_tensor, collocation_points, target_compartments)
+                total_loss.backward()
+                return total_loss
 
-        optimizer_lbfgs.step(closure)
+            optimizer_lbfgs.step(closure)
+            
+            # Log the final model
+            try:
+                mlflow.pytorch.log_model(self.model, "final_model")
+            except Exception as e:
+                logger.warning(f"Failed to log model to MLflow: {e}")
 
-        logger.info("Training completed successfully")
+            logger.info("Training completed successfully")
+            
+        finally:
+            # End MLflow run if we started it
+            if mlflow.active_run():
+                mlflow.end_run()
 
 # Example usage moved to experiments/train_pinn.py

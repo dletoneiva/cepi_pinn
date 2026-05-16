@@ -50,40 +50,56 @@ class PINNTrainer:
         points = (t_min + (t_max - t_min) * torch.rand(n_points)).to(self.device)
         return points.view(-1, 1)
 
-    def compute_loss(self, t_data: torch.Tensor, y_data: torch.Tensor, collocation_points: torch.Tensor, target_compartments: list) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def compute_loss(self, t_data: torch.Tensor, y_data: torch.Tensor, collocation_points: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Compute the total loss for the PINN model.
+        Compute the total loss for the PINN model using data mapping.
 
         Args:
             t_data: Time points for the empirical data with shape (N, 1).
-            y_data: Ground truth data for target compartments with shape (N, C).
+            y_data: Ground truth data with shape (N, C) where C is number of mapped observables.
             collocation_points: Collocation points for physics loss with shape (M, 1).
-            target_compartments: List of compartment names to train on.
 
         Returns:
             Tuple of (total_loss, data_loss, physics_loss)
         """
+        # Get data mapping from config
+        data_mapping = self.config.get('data_mapping', {})
+        
+        if not data_mapping:
+            raise ValueError("No data mapping provided in configuration")
+        
         # Data loss
+        # Get full state prediction from the model
         y_pred_data = self.model(t_data)
         
         # Check if model produced valid output
         if y_pred_data.nelement() == 0:
             raise ValueError("Model produced empty output. Check model initialization and input tensor dimensions.")
         
-        # Select only the target compartments for data loss calculation
-        compartment_indices = [self.physics_model.compartment_names.index(comp) for comp in target_compartments]
+        # Get observables from physics model
+        physics_params = self.config.get('physics_params', {})
+        observables = self.physics_model.get_observables(t_data, y_pred_data, physics_params)
         
-        # Check if indices are valid
-        if not compartment_indices:
-            raise ValueError("No valid compartment indices found. Check target_compartments configuration.")
+        # Calculate data loss using data mapping
+        data_losses = []
+        for i, (csv_column, observable_name) in enumerate(data_mapping.items()):
+            if observable_name not in observables:
+                raise ValueError(f"Observable '{observable_name}' not found in model observables")
             
-        # Check if y_pred_data has the expected number of columns
-        if y_pred_data.shape[1] < max(compartment_indices) + 1:
-            raise ValueError(f"Model output has {y_pred_data.shape[1]} compartments, but requested index {max(compartment_indices)}")
+            # Get the observable tensor and ensure proper shape
+            observable_tensor = observables[observable_name]
+            if observable_tensor.dim() == 1:
+                observable_tensor = observable_tensor.view(-1, 1)
             
-        y_pred_selected = y_pred_data[:, compartment_indices]
-        data_loss = torch.mean((y_pred_selected - y_data) ** 2)
-
+            # Get corresponding data column
+            y_data_column = y_data[:, i:i+1]  # Keep as column vector
+            
+            # Calculate MSE for this observable
+            data_losses.append(torch.mean((observable_tensor - y_data_column) ** 2))
+        
+        # Average data loss across all mapped observables
+        data_loss = torch.stack(data_losses).mean()
+        
         # Physics loss
         t_phys = collocation_points.clone().requires_grad_(True)
         y_pred_phys = self.model(t_phys)
@@ -142,7 +158,7 @@ class PINNTrainer:
                         "n_collocation_points": self.config.get('n_collocation_points', 100),
                         "data_weight": self.config.get('data_weight', 1.0),
                         "physics_weight": self.config.get('physics_weight', 1.0),
-                        "target_compartments": str(self.config.get('target_compartments', self.physics_model.compartment_names))
+                        "data_mapping": str(self.config.get('data_mapping', {}))
                     })
                     logger.info("Logged training parameters to MLflow")
                 except Exception as e:
@@ -166,19 +182,24 @@ class PINNTrainer:
         try:
             # Prepare data
             t_array = self.data['t']
-            target_compartments = self.config.get('target_compartments', self.physics_model.compartment_names)
+            
+            # Get data mapping from config
+            data_mapping = self.config.get('data_mapping', {})
+            
+            if not data_mapping:
+                raise ValueError("No data mapping provided in configuration")
             
             # Check if we have data
             if len(t_array) == 0:
                 raise ValueError("No time data provided for training.")
             
-            # Extract target compartment data
-            y_true_list = [self.data[comp] for comp in target_compartments]
+            # Extract data columns based on data mapping keys
+            y_true_list = [self.data[csv_column] for csv_column in data_mapping.keys()]
             y_true_array = np.column_stack(y_true_list)
             
             # Check if we have target data
             if y_true_array.size == 0:
-                raise ValueError("No target compartment data found.")
+                raise ValueError("No target data found based on data mapping.")
             
             # Convert to tensors
             t_tensor = torch.tensor(t_array, dtype=torch.float32).view(-1, 1).to(self.device)
@@ -213,7 +234,7 @@ class PINNTrainer:
             # Adam phase
             for epoch in range(adam_epochs):
                 optimizer_adam.zero_grad()
-                total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, y_true_tensor, collocation_points, target_compartments)
+                total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, y_true_tensor, collocation_points)
                 total_loss.backward()
                 optimizer_adam.step()
 
@@ -235,7 +256,7 @@ class PINNTrainer:
             # L-BFGS phase
             def closure():
                 optimizer_lbfgs.zero_grad()
-                total_loss, _, _ = self.compute_loss(t_tensor, y_true_tensor, collocation_points, target_compartments)
+                total_loss, _, _ = self.compute_loss(t_tensor, y_true_tensor, collocation_points)
                 total_loss.backward()
                 return total_loss
 

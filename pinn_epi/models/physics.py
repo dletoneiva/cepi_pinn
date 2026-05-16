@@ -41,6 +41,23 @@ class CompartmentalModel(abc.ABC):
         """
         pass
 
+    def get_observables(
+        self, t: torch.Tensor, u: torch.Tensor, params: dict
+    ) -> dict[str, torch.Tensor]:
+        """Get observable quantities from the model state.
+        
+        Default implementation returns the base compartments as observables.
+        
+        Args:
+            t: scalar time tensor
+            u: state tensor of shape (..., n_compartments)
+            params: dict of model parameters
+            
+        Returns:
+            Dictionary mapping observable names to their tensor values
+        """
+        return {name: u[..., i] for i, name in enumerate(self.compartment_names)}
+
 
 class SIRModel(CompartmentalModel):
     """SIR (Susceptible-Infected-Recovered) epidemiological model."""
@@ -59,6 +76,24 @@ class SIRModel(CompartmentalModel):
         dI_dt = beta * S * I - gamma * I
         dR_dt = gamma * I
         return torch.stack([dS_dt, dI_dt, dR_dt], dim=-1)
+
+    def get_observables(
+        self, t: torch.Tensor, u: torch.Tensor, params: dict
+    ) -> dict[str, torch.Tensor]:
+        """Get observable quantities including daily new cases.
+        
+        Returns base compartments plus derived observables.
+        """
+        # Get base compartments from parent implementation
+        observables = super().get_observables(t, u, params)
+        
+        # Add derived observables
+        S, I = u[..., 0], u[..., 1]
+        beta: float = params['beta']
+        # Daily new cases = beta * S * I (same as dI_dt + gamma * I)
+        observables['daily_new_cases'] = beta * S * I
+        
+        return observables
 
 
 class SEIRModel(CompartmentalModel):

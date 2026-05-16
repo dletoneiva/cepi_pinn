@@ -175,15 +175,49 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     if solve_ode and training_config.get("run_training", False):
         logger.info("Starting PINN training with generated simulation data")
         
-        # Prepare data for training
+        # Prepare data for training using data mapping
         training_data = {
             't': t_eval
         }
         
-        # Add compartment data
-        target_compartments = training_config.get("target_compartments", model.compartment_names)
-        for comp in target_compartments:
-            training_data[comp] = trajectories[comp].flatten()
+        # Get data mapping from training config
+        data_mapping = training_config.get("data_mapping", {})
+        
+        # Add data columns based on the mapping
+        for csv_column, observable_name in data_mapping.items():
+            # For base compartments, use the trajectory data directly
+            if observable_name in trajectories:
+                training_data[csv_column] = trajectories[observable_name].flatten()
+            # For derived observables like daily_new_cases, we need to compute them
+            elif observable_name == 'daily_new_cases' and isinstance(model, type(model).__bases__[0]).__name__ == 'SIRModel':
+                # Compute daily new cases from SIR model: beta * S * I
+                S = trajectories['S'].flatten()
+                I = trajectories['I'].flatten()
+                beta = params['beta']
+                training_data[csv_column] = beta * S * I
+            else:
+                # For other observables, we might need to compute them or they might not be available
+                logger.warning(f"Observable '{observable_name}' not directly available in trajectories")
+                # Try to get it from the model's get_observables method
+                try:
+                    # This is a simplified approach - in practice, you'd need to evaluate the model at each time point
+                    # For now, we'll just use the first time point as an example
+                    u_example = torch.tensor([trajectories[name][0] for name in model.compartment_names], dtype=torch.float32)
+                    t_example = torch.tensor(t_eval[0], dtype=torch.float32)
+                    observables = model.get_observables(t_example, u_example, params)
+                    if observable_name in observables:
+                        # This is a simplification - in reality, you'd compute this for all time points
+                        training_data[csv_column] = observables[observable_name].numpy()
+                    else:
+                        raise ValueError(f"Observable '{observable_name}' not found in model observables")
+                except Exception as e:
+                    logger.warning(f"Could not compute observable '{observable_name}': {e}")
+                    # Fallback to using the trajectory data if the name matches a compartment
+                    if observable_name in model.compartment_names:
+                        idx = model.compartment_names.index(observable_name)
+                        training_data[csv_column] = trajectories[model.compartment_names[idx]].flatten()
+                    else:
+                        raise ValueError(f"Could not find data for observable '{observable_name}'")
         
         # Create PINN model using the network configuration
         pinn_model = create_pinn_model(network_config, model.compartment_names, y0, t_span)

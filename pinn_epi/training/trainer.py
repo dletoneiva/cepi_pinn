@@ -114,27 +114,52 @@ class PINNTrainer:
         """
         Train the PINN model using Adam and L-BFGS optimizers.
         """
+        # Ensure MLflow is properly configured
+        try:
+            # Set tracking URI if not already set (you might need to adjust this based on your setup)
+            # mlflow.set_tracking_uri("http://localhost:5000")  # Uncomment and adjust if needed
+            pass
+        except Exception as e:
+            logger.warning(f"Failed to set MLflow tracking URI: {e}")
+        
         # Start MLflow run if not already active
+        should_end_run = False
         if not mlflow.active_run():
-            mlflow.start_run()
+            try:
+                mlflow.start_run()
+                should_end_run = True
+                logger.info("Started new MLflow run")
+            except Exception as e:
+                logger.warning(f"Failed to start MLflow run: {e}")
+                should_end_run = False
+        else:
+            logger.info("Using existing MLflow run")
             
         try:
             # Log model and training parameters
-            mlflow.log_params({
-                "model_type": type(self.physics_model).__name__,
-                "compartment_names": str(self.physics_model.compartment_names),
-                "adam_lr": self.config.get('adam_lr', 1e-3),
-                "adam_epochs": self.config.get('adam_epochs', 5000),
-                "n_collocation_points": self.config.get('n_collocation_points', 100),
-                "data_weight": self.config.get('data_weight', 1.0),
-                "physics_weight": self.config.get('physics_weight', 1.0),
-                "target_compartments": str(self.config.get('target_compartments', self.physics_model.compartment_names))
-            })
+            try:
+                mlflow.log_params({
+                    "model_type": type(self.physics_model).__name__,
+                    "compartment_names": str(self.physics_model.compartment_names),
+                    "adam_lr": self.config.get('adam_lr', 1e-3),
+                    "adam_epochs": self.config.get('adam_epochs', 5000),
+                    "n_collocation_points": self.config.get('n_collocation_points', 100),
+                    "data_weight": self.config.get('data_weight', 1.0),
+                    "physics_weight": self.config.get('physics_weight', 1.0),
+                    "target_compartments": str(self.config.get('target_compartments', self.physics_model.compartment_names))
+                })
+                logger.info("Logged training parameters to MLflow")
+            except Exception as e:
+                logger.warning(f"Failed to log parameters to MLflow: {e}")
             
             # Log physics parameters if available
-            physics_params = self.config.get('physics_params', {})
-            if physics_params:
-                mlflow.log_params(physics_params)
+            try:
+                physics_params = self.config.get('physics_params', {})
+                if physics_params:
+                    mlflow.log_params(physics_params)
+                    logger.info("Logged physics parameters to MLflow")
+            except Exception as e:
+                logger.warning(f"Failed to log physics parameters to MLflow: {e}")
             
             # Prepare data
             t_array = self.data['t']
@@ -193,13 +218,15 @@ class PINNTrainer:
                     logger.info(f"Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}")
                     # Log metrics with MLflow
                     try:
-                        mlflow.log_metrics({
-                            "total_loss": total_loss.item(),
-                            "data_loss": data_loss.item(),
-                            "physics_loss": physics_loss.item()
-                        }, step=epoch)
+                        if mlflow.active_run():
+                            mlflow.log_metrics({
+                                "total_loss": total_loss.item(),
+                                "data_loss": data_loss.item(),
+                                "physics_loss": physics_loss.item()
+                            }, step=epoch)
+                            logger.debug(f"Logged metrics to MLflow at epoch {epoch}")
                     except Exception as e:
-                        logger.warning(f"Failed to log metrics to MLflow: {e}")
+                        logger.warning(f"Failed to log metrics to MLflow at epoch {epoch}: {e}")
 
             # L-BFGS phase
             def closure():
@@ -212,13 +239,22 @@ class PINNTrainer:
             
             # Log the final model
             try:
-                mlflow.pytorch.log_model(self.model, "final_model")
+                if mlflow.active_run():
+                    mlflow.pytorch.log_model(self.model, "final_model")
+                    logger.info("Logged final model to MLflow")
             except Exception as e:
                 logger.warning(f"Failed to log model to MLflow: {e}")
 
             logger.info("Training completed successfully")
             
+        except Exception as e:
+            logger.error(f"Training failed with error: {e}")
+            raise
         finally:
             # End MLflow run if we started it
-            if mlflow.active_run():
-                mlflow.end_run()
+            if should_end_run and mlflow.active_run():
+                try:
+                    mlflow.end_run()
+                    logger.info("Ended MLflow run")
+                except Exception as e:
+                    logger.warning(f"Failed to end MLflow run: {e}")

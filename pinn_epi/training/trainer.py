@@ -29,6 +29,10 @@ class PINNTrainer:
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
+        
+        # Check MLflow configuration
+        self.mlflow_config = self.config.get('mlflow', {})
+        self.mlflow_enabled = self.mlflow_config.get('enabled', True)
 
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """
@@ -114,53 +118,52 @@ class PINNTrainer:
         """
         Train the PINN model using Adam and L-BFGS optimizers.
         """
-        # Ensure MLflow is properly configured
-        try:
-            # Set tracking URI if not already set (you might need to adjust this based on your setup)
-            # mlflow.set_tracking_uri("http://localhost:5000")  # Uncomment and adjust if needed
-            pass
-        except Exception as e:
-            logger.warning(f"Failed to set MLflow tracking URI: {e}")
-        
-        # Start MLflow run if not already active
+        # MLflow setup
         should_end_run = False
-        if not mlflow.active_run():
+        if self.mlflow_enabled:
             try:
-                mlflow.start_run()
-                should_end_run = True
-                logger.info("Started new MLflow run")
+                # Start MLflow run if not already active
+                if not mlflow.active_run():
+                    experiment_name = self.mlflow_config.get('experiment_name', 'pinn_training')
+                    mlflow.set_experiment(experiment_name)
+                    mlflow.start_run()
+                    should_end_run = True
+                    logger.info(f"Started new MLflow run in experiment: {experiment_name}")
+                else:
+                    logger.info("Using existing MLflow run")
+                
+                # Log model and training parameters
+                try:
+                    mlflow.log_params({
+                        "model_type": type(self.physics_model).__name__,
+                        "compartment_names": str(self.physics_model.compartment_names),
+                        "adam_lr": self.config.get('adam_lr', 1e-3),
+                        "adam_epochs": self.config.get('adam_epochs', 5000),
+                        "n_collocation_points": self.config.get('n_collocation_points', 100),
+                        "data_weight": self.config.get('data_weight', 1.0),
+                        "physics_weight": self.config.get('physics_weight', 1.0),
+                        "target_compartments": str(self.config.get('target_compartments', self.physics_model.compartment_names))
+                    })
+                    logger.info("Logged training parameters to MLflow")
+                except Exception as e:
+                    logger.warning(f"Failed to log parameters to MLflow: {e}")
+                
+                # Log physics parameters if available
+                try:
+                    physics_params = self.config.get('physics_params', {})
+                    if physics_params:
+                        mlflow.log_params(physics_params)
+                        logger.info("Logged physics parameters to MLflow")
+                except Exception as e:
+                    logger.warning(f"Failed to log physics parameters to MLflow: {e}")
+                    
             except Exception as e:
-                logger.warning(f"Failed to start MLflow run: {e}")
-                should_end_run = False
+                logger.warning(f"Failed to set up MLflow: {e}")
+                self.mlflow_enabled = False  # Disable MLflow for the rest of training
         else:
-            logger.info("Using existing MLflow run")
+            logger.info("MLflow logging is disabled")
             
         try:
-            # Log model and training parameters
-            try:
-                mlflow.log_params({
-                    "model_type": type(self.physics_model).__name__,
-                    "compartment_names": str(self.physics_model.compartment_names),
-                    "adam_lr": self.config.get('adam_lr', 1e-3),
-                    "adam_epochs": self.config.get('adam_epochs', 5000),
-                    "n_collocation_points": self.config.get('n_collocation_points', 100),
-                    "data_weight": self.config.get('data_weight', 1.0),
-                    "physics_weight": self.config.get('physics_weight', 1.0),
-                    "target_compartments": str(self.config.get('target_compartments', self.physics_model.compartment_names))
-                })
-                logger.info("Logged training parameters to MLflow")
-            except Exception as e:
-                logger.warning(f"Failed to log parameters to MLflow: {e}")
-            
-            # Log physics parameters if available
-            try:
-                physics_params = self.config.get('physics_params', {})
-                if physics_params:
-                    mlflow.log_params(physics_params)
-                    logger.info("Logged physics parameters to MLflow")
-            except Exception as e:
-                logger.warning(f"Failed to log physics parameters to MLflow: {e}")
-            
             # Prepare data
             t_array = self.data['t']
             target_compartments = self.config.get('target_compartments', self.physics_model.compartment_names)
@@ -217,16 +220,17 @@ class PINNTrainer:
                 if epoch % log_interval == 0:
                     logger.info(f"Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}")
                     # Log metrics with MLflow
-                    try:
-                        if mlflow.active_run():
-                            mlflow.log_metrics({
-                                "total_loss": total_loss.item(),
-                                "data_loss": data_loss.item(),
-                                "physics_loss": physics_loss.item()
-                            }, step=epoch)
-                            logger.debug(f"Logged metrics to MLflow at epoch {epoch}")
-                    except Exception as e:
-                        logger.warning(f"Failed to log metrics to MLflow at epoch {epoch}: {e}")
+                    if self.mlflow_enabled:
+                        try:
+                            if mlflow.active_run():
+                                mlflow.log_metrics({
+                                    "total_loss": total_loss.item(),
+                                    "data_loss": data_loss.item(),
+                                    "physics_loss": physics_loss.item()
+                                }, step=epoch)
+                                logger.debug(f"Logged metrics to MLflow at epoch {epoch}")
+                        except Exception as e:
+                            logger.warning(f"Failed to log metrics to MLflow at epoch {epoch}: {e}")
 
             # L-BFGS phase
             def closure():
@@ -238,12 +242,13 @@ class PINNTrainer:
             optimizer_lbfgs.step(closure)
             
             # Log the final model
-            try:
-                if mlflow.active_run():
-                    mlflow.pytorch.log_model(self.model, "final_model")
-                    logger.info("Logged final model to MLflow")
-            except Exception as e:
-                logger.warning(f"Failed to log model to MLflow: {e}")
+            if self.mlflow_enabled:
+                try:
+                    if mlflow.active_run():
+                        mlflow.pytorch.log_model(self.model, "final_model")
+                        logger.info("Logged final model to MLflow")
+                except Exception as e:
+                    logger.warning(f"Failed to log model to MLflow: {e}")
 
             logger.info("Training completed successfully")
             
@@ -252,7 +257,7 @@ class PINNTrainer:
             raise
         finally:
             # End MLflow run if we started it
-            if should_end_run and mlflow.active_run():
+            if self.mlflow_enabled and should_end_run and mlflow.active_run():
                 try:
                     mlflow.end_run()
                     logger.info("Ended MLflow run")

@@ -143,7 +143,8 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     
     # Handle data saving only if we have trajectories
     if solve_ode:
-        data_config = get_data_config(config_dict)
+        # Get data config from observables if available
+        data_config = config_dict.get("observables", {}).get("data", {})
         save_data = data_config.get("save_data", True)
         
         logger.info(f"Data saving configuration - save_data: {save_data}")

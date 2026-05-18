@@ -13,3 +13,6 @@ observed_variables: ["I"]
 plotting:
   show_plot: true
   save_plot: true
+
+data:
+  save_data: true

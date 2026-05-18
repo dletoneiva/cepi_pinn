@@ -12,6 +12,3 @@ numerical_ode_params:
 
 plotting:
   title: "Compartmental Model Simulation"
-
-data:
-  save_data: true

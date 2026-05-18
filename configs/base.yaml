@@ -4,7 +4,7 @@ defaults:
   - training: test
   - _self_
 
-simulation:
+numerical_ode_params:
   t_span: [0, 50]
   t_eval_points: 1000
   solve_ode: true

@@ -123,13 +123,10 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
             os.makedirs(hydra_output_dir, exist_ok=True)
             logger.info(f"Figure will be saved to: {save_path}")
         
-        # Generate title based on model compartments if not provided or is default
+        # Generate title based on model type if not provided or is default
         model_type = config_dict["compartmental"]["model"]["type"]
         if title == "Compartmental Model Simulation":  # Default title, replace with model-specific one
-            # Get compartment names from the model
-            compartment_names = model.compartment_names
-            compartments_str = "".join(compartment_names)
-            title = f"{model_type.upper()} Model: {compartments_str} Differential Equation Solutions"
+            title = f"{type(model).__name__} Differential Equation Solutions"
         
         fig, ax = plot_compartmental_solution(
             t=t_eval,
@@ -139,7 +136,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
             save_path=save_path,
             model_params=params,
             initial_conditions=y0,
-            model_type=model_type,
+            model_type=type(model).__name__,
         )
         result["figure"] = fig
         result["axes"] = ax

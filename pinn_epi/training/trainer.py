@@ -8,6 +8,8 @@ from pinn_epi.models.networks import ModularPINN
 from pinn_epi.models.physics import CompartmentalModel
 import mlflow
 import mlflow.pytorch
+import hydra
+import os
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -129,6 +131,27 @@ class PINNTrainer:
         total_loss = self.config.get('data_weight', 1.0) * data_loss + self.config.get('physics_weight', 1.0) * physics_loss
 
         return total_loss, data_loss, physics_loss
+
+    def save_model_for_inference(self):
+        """Save the trained model for later inference."""
+        try:
+            # Get Hydra output directory
+            hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+            model_save_path = os.path.join(hydra_output_dir, "trained_pinn_model.pth")
+            
+            # Save model state dict
+            torch.save(self.model.state_dict(), model_save_path)
+            logger.info(f"Saved model for inference to: {model_save_path}")
+            
+            # Also save the full model for easier loading
+            full_model_path = os.path.join(hydra_output_dir, "trained_pinn_model_full.pth")
+            torch.save(self.model, full_model_path)
+            logger.info(f"Saved full model to: {full_model_path}")
+            
+            return model_save_path
+        except Exception as e:
+            logger.warning(f"Failed to save model for inference: {e}")
+            return None
 
     def train(self):
         """
@@ -270,6 +293,17 @@ class PINNTrainer:
                         logger.info("Logged final model to MLflow")
                 except Exception as e:
                     logger.warning(f"Failed to log model to MLflow: {e}")
+            
+            # Save model for inference
+            model_save_path = self.save_model_for_inference()
+            
+            # Log model save path to MLflow if enabled
+            if self.mlflow_enabled and model_save_path:
+                try:
+                    if mlflow.active_run():
+                        mlflow.log_param("model_save_path", model_save_path)
+                except Exception as e:
+                    logger.warning(f"Failed to log model save path to MLflow: {e}")
 
             logger.info("Training completed successfully")
             

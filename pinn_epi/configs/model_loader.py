@@ -162,14 +162,14 @@ def get_simulation_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return sim_config
 
 
-def get_plotting_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract plotting configuration from configuration.
+def get_synthetic_plotting_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract synthetic plotting configuration from configuration.
     
     Args:
         config: Configuration dictionary
         
     Returns:
-        Plotting configuration dictionary
+        Synthetic plotting configuration dictionary
     """
     return config.get('plotting', {})
 

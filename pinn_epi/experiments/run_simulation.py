@@ -17,7 +17,7 @@ from pinn_epi.configs.model_loader import (
     get_network_config,
     get_training_config,
     get_simulation_config,
-    get_plotting_config,
+    get_synthetic_plotting_config,
     get_data_config
 )
 from pinn_epi.analysis.evaluator import solve_compartmental_model
@@ -102,7 +102,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         # Get plotting config from observables if available, otherwise from base config
         synthetic_plotting_config = config_dict.get("observables", {}).get("plotting", {})
         if not synthetic_plotting_config:
-            synthetic_plotting_config = get_plotting_config(config_dict)
+            synthetic_plotting_config = get_synthetic_plotting_config(config_dict)
             
         show_plot = synthetic_plotting_config.get("show_plot", True)
         save_plot = synthetic_plotting_config.get("save_plot", False)

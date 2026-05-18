@@ -124,11 +124,12 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
             logger.info(f"Figure will be saved to: {save_path}")
         
         # Generate title based on model compartments if not provided or is default
+        model_type = config_dict["compartmental"]["model"]["type"]
         if title == "Compartmental Model Simulation":  # Default title, replace with model-specific one
             # Get compartment names from the model
             compartment_names = model.compartment_names
             compartments_str = "".join(compartment_names)
-            title = f"{compartments_str} differential equation solutions"
+            title = f"{model_type.upper()} Model: {compartments_str} Differential Equation Solutions"
         
         fig, ax = plot_compartmental_solution(
             t=t_eval,
@@ -138,6 +139,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
             save_path=save_path,
             model_params=params,
             initial_conditions=y0,
+            model_type=model_type,
         )
         result["figure"] = fig
         result["axes"] = ax

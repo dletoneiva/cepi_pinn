@@ -22,6 +22,7 @@ def plot_compartmental_solution(
     save_path: Optional[str] = None,
     model_params: Optional[dict] = None,
     initial_conditions: Optional[list] = None,
+    model_type: Optional[str] = None,
 ) -> tuple[plt.Figure, plt.Axes]:
 
     apply_plot_style()
@@ -48,7 +49,14 @@ def plot_compartmental_solution(
 
     if title is None:
         compartments = "".join(compartment_names)
-        title = f"{compartments} Differential Equation Solutions"
+        if model_type:
+            title = f"{model_type.upper()} Model: {compartments} Differential Equation Solutions"
+        else:
+            title = f"{compartments} Differential Equation Solutions"
+    elif model_type and "Compartmental Model Simulation" in title:
+        # Replace generic title with model-specific one
+        compartments = "".join(compartment_names)
+        title = f"{model_type.upper()} Model: {compartments} Differential Equation Solutions"
     
     ax.set_title(title, pad=60, fontsize=PLOT_STYLE['figure.titlesize'])
 

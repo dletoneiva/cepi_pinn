@@ -16,7 +16,6 @@ def plot_compartmental_solution(
     t: np.ndarray,
     trajectories: dict[str, np.ndarray],
     compartment_colors: Optional[dict[str, str]] = None,
-    title: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
     show: bool = False,
     save_path: Optional[str] = None,
@@ -47,9 +46,7 @@ def plot_compartmental_solution(
     ax.tick_params(axis='x', labelsize=PLOT_STYLE['xtick.labelsize'])
     ax.tick_params(axis='y', labelsize=PLOT_STYLE['ytick.labelsize'])
 
-    if title is None:
-        title = f"{model_type} Differential Equation Solutions"
-    
+    title = f"{model_type} Differential Equation Solutions"
     ax.set_title(title, pad=60, fontsize=PLOT_STYLE['figure.titlesize'])
 
     if created_fig:

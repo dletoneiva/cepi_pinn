@@ -106,7 +106,6 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
             
         show_plot = synthetic_plotting_config.get("show_plot", True)
         save_plot = synthetic_plotting_config.get("save_plot", False)
-        title = synthetic_plotting_config.get("title", "Compartmental Model Simulation")
         
         logger.info(f"Plotting configuration - show_plot: {show_plot}, save_plot: {save_plot}")
         
@@ -123,15 +122,12 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
             os.makedirs(hydra_output_dir, exist_ok=True)
             logger.info(f"Figure will be saved to: {save_path}")
         
-        # Generate title based on model type if not provided or is default
+        # Get model type for plotting
         model_type = config_dict["compartmental"]["model"]["type"]
-        if title == "Compartmental Model Simulation":  # Default title, replace with model-specific one
-            title = f"{type(model).__name__} Differential Equation Solutions"
         
         fig, ax = plot_compartmental_solution(
             t=t_eval,
             trajectories=trajectories,
-            title=title,
             show=show_plot,
             save_path=save_path,
             model_params=params,

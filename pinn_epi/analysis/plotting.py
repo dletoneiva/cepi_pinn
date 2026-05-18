@@ -48,13 +48,6 @@ def plot_compartmental_solution(
     ax.tick_params(axis='y', labelsize=PLOT_STYLE['ytick.labelsize'])
 
     if title is None:
-        if model_type:
-            title = f"{model_type} Differential Equation Solutions"
-        else:
-            compartments = "".join(compartment_names)
-            title = f"{compartments} Differential Equation Solutions"
-    elif model_type and "Compartmental Model Simulation" in title:
-        # Replace generic title with model-specific one
         title = f"{model_type} Differential Equation Solutions"
     
     ax.set_title(title, pad=60, fontsize=PLOT_STYLE['figure.titlesize'])

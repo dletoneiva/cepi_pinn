@@ -1,11 +1,15 @@
 type: "synthetic"
 t_max: 300
-n_points: 1000
+n_points: 500
 noise_level: 0.00
 
 numerical_ode_params:
   t_span: [0, 50]
-  t_eval_points: 1000
+  t_eval_points: 500
   solve_ode: true
 
-observed_variables: ["I", "R"]
+observed_variables: ["I"]
+
+plotting:
+  show_plot: true
+  save_plot: true

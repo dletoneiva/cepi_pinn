@@ -99,9 +99,14 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     
     # Handle plotting only if we have trajectories
     if solve_ode:
-        plotting_config = get_plotting_config(config_dict)
+        # Get plotting config from observables if available, otherwise from base config
+        plotting_config = config_dict.get("observables", {}).get("plotting", {})
+        if not plotting_config:
+            plotting_config = get_plotting_config(config_dict)
+            
         show_plot = plotting_config.get("show_plot", True)
         save_plot = plotting_config.get("save_plot", False)
+        title = plotting_config.get("title", "Compartmental Model Simulation")
         
         logger.info(f"Plotting configuration - show_plot: {show_plot}, save_plot: {save_plot}")
         
@@ -118,8 +123,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
             os.makedirs(hydra_output_dir, exist_ok=True)
             logger.info(f"Figure will be saved to: {save_path}")
         
-        # Generate title based on model compartments if not provided
-        title = plotting_config.get("title")
+        # Generate title based on model compartments if not provided or is default
         if title == "Compartmental Model Simulation":  # Default title, replace with model-specific one
             # Get compartment names from the model
             compartment_names = model.compartment_names

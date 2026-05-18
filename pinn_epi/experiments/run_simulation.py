@@ -24,7 +24,7 @@ from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.plotting import plot_compartmental_solution
 from pinn_epi.analysis.data_wrangler import save_simulation_data, DataWrangler
 from pinn_epi.training.trainer import PINNTrainer
-from pinn_epi.models.networks import ModularPINN
+from pinn_epi.models.networks import ModularPINN, BaseMLP, TimeNormalizationEncoder, HardICHead
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -229,7 +229,6 @@ def create_pinn_model(network_config: dict, compartment_names: list, initial_con
     Returns:
         Configured ModularPINN model
     """
-    from pinn_epi.models.networks import BaseMLP, TimeNormalizationEncoder, HardICHead, ModularPINN
     
     # Create network backbone
     backbone_config = network_config.get("backbone", {})

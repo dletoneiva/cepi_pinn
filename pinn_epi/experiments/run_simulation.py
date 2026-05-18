@@ -55,6 +55,15 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     y0 = get_initial_conditions(config_dict)
     simulation_config = get_simulation_config(config_dict)
     
+    # Log the simulation config for debugging
+    logger.info(f"Simulation config: {simulation_config}")
+    
+    # Check if required keys exist in simulation_config
+    if "t_span" not in simulation_config:
+        raise KeyError("Missing required key 't_span' in simulation configuration")
+    if "t_eval_points" not in simulation_config:
+        raise KeyError("Missing required key 't_eval_points' in simulation configuration")
+    
     # Extract simulation parameters
     t_span = simulation_config["t_span"]
     t_eval_points = simulation_config["t_eval_points"]

@@ -155,7 +155,7 @@ def get_simulation_config(config: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Simulation configuration dictionary
     """
-    sim_config = config.get('simulation', {})
+    sim_config = config.get('numerical_ode_params', {})
     # Ensure solve_ode key exists with default value
     if 'solve_ode' not in sim_config:
         sim_config['solve_ode'] = True

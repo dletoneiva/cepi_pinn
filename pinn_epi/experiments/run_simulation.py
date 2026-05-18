@@ -184,42 +184,14 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     if solve_ode and training_config.get("run_training", False):
         logger.info("Starting PINN training with generated simulation data")
         
-        # Prepare data for training using data mapping
+        # Prepare data for training - use all compartments directly
         training_data = {
             't': t_eval
         }
         
-        # Get data mapping from training config
-        data_mapping = training_config.get("data_mapping", {})
-        
-        # Add data columns based on the mapping
-        for csv_column, observable_name in data_mapping.items():
-            # For base compartments, use the trajectory data directly
-            if observable_name in trajectories:
-                training_data[csv_column] = trajectories[observable_name].flatten()
-            else:
-                # For other observables, try to get them from the model's get_observables method
-                try:
-                    # Compute observables for all time points
-                    observable_values = []
-                    for i in range(len(t_eval)):
-                        u_tensor = torch.tensor([trajectories[name][i] for name in model.compartment_names], dtype=torch.float32)
-                        t_tensor = torch.tensor(t_eval[i], dtype=torch.float32)
-                        observables = model.get_observables(t_tensor, u_tensor.unsqueeze(0), params)
-                        if observable_name in observables:
-                            observable_values.append(observables[observable_name].item())
-                        else:
-                            raise ValueError(f"Observable '{observable_name}' not found in model observables")
-                    
-                    training_data[csv_column] = np.array(observable_values)
-                except Exception as e:
-                    logger.warning(f"Could not compute observable '{observable_name}': {e}")
-                    # Fallback to using the trajectory data if the name matches a compartment
-                    if observable_name in model.compartment_names:
-                        idx = model.compartment_names.index(observable_name)
-                        training_data[csv_column] = trajectories[model.compartment_names[idx]].flatten()
-                    else:
-                        raise ValueError(f"Could not find data for observable '{observable_name}'")
+        # Add all compartment trajectories to training data
+        for i, compartment_name in enumerate(model.compartment_names):
+            training_data[compartment_name] = trajectories[compartment_name].flatten()
         
         # Create PINN model using the network configuration
         pinn_model = create_pinn_model(network_config, model.compartment_names, y0, t_span)

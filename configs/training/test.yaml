@@ -12,13 +12,6 @@ log_interval: 10
 data_weight: 1.0
 physics_weight: 1.0
 
-# Data mapping: maps CSV column names to model observables
-# Simplified to work with all SIR-based models
-data_mapping:
-  S: S
-  I: I
-  R: R
-
 # Physics parameters (will be passed to the physics model)
 physics_params: {}
 

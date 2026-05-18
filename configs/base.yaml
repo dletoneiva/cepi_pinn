@@ -7,6 +7,7 @@ defaults:
 simulation:
   t_span: [0, 50]
   t_eval_points: 1000
+  solve_ode: true
 
 plotting:
   title: "Compartmental Model Simulation"

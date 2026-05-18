@@ -2,6 +2,7 @@ defaults:
   - compartmental: sir
   - network: test
   - training: test
+  - observables: synthetic
   - _self_
 
 numerical_ode_params:

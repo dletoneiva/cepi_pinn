@@ -1,0 +1,11 @@
+type: "synthetic"
+t_max: 300
+n_points: 1000
+noise_level: 0.00
+
+numerical_ode_params:
+  t_span: [0, 50]
+  t_eval_points: 1000
+  solve_ode: true
+
+observed_variables: ["I", "R"]

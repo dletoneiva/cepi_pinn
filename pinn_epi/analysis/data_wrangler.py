@@ -1,11 +1,115 @@
 """Data handling tools for saving and loading simulation data."""
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import numpy as np
 import pandas as pd
 import json
 import os
 from pathlib import Path
+import torch
+from pinn_epi.models.physics import CompartmentalModel
+
+
+class DataWrangler:
+    """Handles data processing, validation, and tensor extraction for PINN training."""
+    
+    def __init__(
+        self, 
+        physics_model: CompartmentalModel, 
+        observables_config: Dict[str, Any]
+    ):
+        """Initialize the DataWrangler with physics model and observables configuration.
+        
+        Args:
+            physics_model: The compartmental model used for validation
+            observables_config: Configuration for observables processing
+        """
+        self.physics_model = physics_model
+        self.observables_config = observables_config
+        self.df: Optional[pd.DataFrame] = None
+        self.model_params: Optional[Dict[str, float]] = None
+        self.initial_conditions: Optional[List[float]] = None
+        self.compartment_names: Optional[List[str]] = None
+        
+    def load_full_dataset(
+        self,
+        trajectories: Dict[str, np.ndarray],
+        model_params: Dict[str, float],
+        initial_conditions: List[float],
+        compartment_names: List[str],
+        t_eval: Optional[np.ndarray] = None
+    ) -> None:
+        """Load the full dataset from evaluator output.
+        
+        Args:
+            trajectories: Dictionary mapping compartment names to their time series data
+            model_params: Dictionary of model parameters
+            initial_conditions: List of initial condition values
+            compartment_names: List of compartment names in order
+            t_eval: Time points array (optional)
+        """
+        # Store metadata
+        self.model_params = model_params
+        self.initial_conditions = initial_conditions
+        self.compartment_names = compartment_names
+        
+        # Create dataframe with all compartments
+        if t_eval is not None:
+            data_dict = {'time': t_eval}
+            data_dict.update(trajectories)
+        else:
+            data_dict = trajectories.copy()
+            
+        self.df = pd.DataFrame(data_dict)
+        
+    def validate_observables(self) -> None:
+        """Validate that observed variables exist in the model compartments.
+        
+        Raises:
+            ValueError: If any observed variable is not in the model compartments
+        """
+        if self.df is None:
+            raise ValueError("Dataset not loaded. Call load_full_dataset first.")
+            
+        observed_variables = self.observables_config.get('observed_variables', [])
+        model_compartments = self.physics_model.compartment_names
+        
+        invalid_vars = set(observed_variables) - set(model_compartments)
+        if invalid_vars:
+            raise ValueError(
+                f"Observed variables {list(invalid_vars)} not found in model compartments {model_compartments}"
+            )
+            
+    def get_training_tensors(self) -> Dict[str, torch.Tensor]:
+        """Extract PyTorch tensors for observed variables only.
+        
+        Returns:
+            Dictionary mapping observed variable names to their PyTorch tensors
+        """
+        if self.df is None:
+            raise ValueError("Dataset not loaded. Call load_full_dataset first.")
+            
+        self.validate_observables()
+        observed_variables = self.observables_config.get('observed_variables', [])
+        
+        # Extract tensors for observed variables only
+        training_tensors = {}
+        for var in observed_variables:
+            training_tensors[var] = torch.tensor(
+                self.df[var].values, 
+                dtype=torch.float32
+            )
+            
+        # Always include time
+        if 'time' in self.df.columns:
+            training_tensors['t'] = torch.tensor(
+                self.df['time'].values, 
+                dtype=torch.float32
+            )
+        else:
+            raise ValueError("Time column not found in dataset")
+            
+        return training_tensors
 
 
 def save_simulation_data(

@@ -22,7 +22,7 @@ from pinn_epi.configs.model_loader import (
 )
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.plotting import plot_compartmental_solution
-from pinn_epi.analysis.data_wrangler import save_simulation_data
+from pinn_epi.analysis.data_wrangler import save_simulation_data, DataWrangler
 from pinn_epi.training.trainer import PINNTrainer
 from pinn_epi.models.networks import ModularPINN
 
@@ -184,14 +184,18 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     if solve_ode and training_config.get("run_training", False):
         logger.info("Starting PINN training with generated simulation data")
         
-        # Prepare data for training - use all compartments directly
-        training_data = {
-            't': t_eval
-        }
+        # Create DataWrangler to handle observables
+        data_wrangler = DataWrangler(model, config_dict.get("observables", {}))
+        data_wrangler.load_full_dataset(
+            trajectories=trajectories,
+            model_params=params,
+            initial_conditions=y0,
+            compartment_names=model.compartment_names,
+            t_eval=t_eval
+        )
         
-        # Add all compartment trajectories to training data
-        for i, compartment_name in enumerate(model.compartment_names):
-            training_data[compartment_name] = trajectories[compartment_name].flatten()
+        # Get training tensors for observed variables only
+        training_tensors = data_wrangler.get_training_tensors()
         
         # Create PINN model using the network configuration
         pinn_model = create_pinn_model(network_config, model.compartment_names, y0, t_span)
@@ -200,7 +204,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         trainer = PINNTrainer(
             model=pinn_model,
             physics_model=model,  # The compartmental model for physics loss
-            data=training_data,
+            data=training_tensors,
             config=training_config
         )
         

@@ -197,28 +197,21 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
             # For base compartments, use the trajectory data directly
             if observable_name in trajectories:
                 training_data[csv_column] = trajectories[observable_name].flatten()
-            # For derived observables like daily_new_cases, we need to compute them
-            elif observable_name == 'daily_new_cases' and isinstance(model, type(model).__bases__[0]).__name__ == 'SIRModel':
-                # Compute daily new cases from SIR model: beta * S * I
-                S = trajectories['S'].flatten()
-                I = trajectories['I'].flatten()
-                beta = params['beta']
-                training_data[csv_column] = beta * S * I
             else:
-                # For other observables, we might need to compute them or they might not be available
-                logger.warning(f"Observable '{observable_name}' not directly available in trajectories")
-                # Try to get it from the model's get_observables method
+                # For other observables, try to get them from the model's get_observables method
                 try:
-                    # This is a simplified approach - in practice, you'd need to evaluate the model at each time point
-                    # For now, we'll just use the first time point as an example
-                    u_example = torch.tensor([trajectories[name][0] for name in model.compartment_names], dtype=torch.float32)
-                    t_example = torch.tensor(t_eval[0], dtype=torch.float32)
-                    observables = model.get_observables(t_example, u_example, params)
-                    if observable_name in observables:
-                        # This is a simplification - in reality, you'd compute this for all time points
-                        training_data[csv_column] = observables[observable_name].numpy()
-                    else:
-                        raise ValueError(f"Observable '{observable_name}' not found in model observables")
+                    # Compute observables for all time points
+                    observable_values = []
+                    for i in range(len(t_eval)):
+                        u_tensor = torch.tensor([trajectories[name][i] for name in model.compartment_names], dtype=torch.float32)
+                        t_tensor = torch.tensor(t_eval[i], dtype=torch.float32)
+                        observables = model.get_observables(t_tensor, u_tensor.unsqueeze(0), params)
+                        if observable_name in observables:
+                            observable_values.append(observables[observable_name].item())
+                        else:
+                            raise ValueError(f"Observable '{observable_name}' not found in model observables")
+                    
+                    training_data[csv_column] = np.array(observable_values)
                 except Exception as e:
                     logger.warning(f"Could not compute observable '{observable_name}': {e}")
                     # Fallback to using the trajectory data if the name matches a compartment

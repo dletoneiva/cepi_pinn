@@ -13,11 +13,11 @@ data_weight: 1.0
 physics_weight: 1.0
 
 # Data mapping: maps CSV column names to model observables
+# Simplified to work with all SIR-based models
 data_mapping:
   S: S
   I: I
   R: R
-  new_cases: daily_new_cases
 
 # Physics parameters (will be passed to the physics model)
 physics_params: {}

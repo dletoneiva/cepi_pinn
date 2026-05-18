@@ -155,7 +155,11 @@ def get_simulation_config(config: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Simulation configuration dictionary
     """
-    return config.get('simulation', {})
+    sim_config = config.get('simulation', {})
+    # Ensure solve_ode key exists with default value
+    if 'solve_ode' not in sim_config:
+        sim_config['solve_ode'] = True
+    return sim_config
 
 
 def get_plotting_config(config: Dict[str, Any]) -> Dict[str, Any]:

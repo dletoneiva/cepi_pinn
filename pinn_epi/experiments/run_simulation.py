@@ -100,13 +100,13 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     # Handle plotting only if we have trajectories
     if solve_ode:
         # Get plotting config from observables if available, otherwise from base config
-        plotting_config = config_dict.get("observables", {}).get("plotting", {})
-        if not plotting_config:
-            plotting_config = get_plotting_config(config_dict)
+        synthetic_plotting_config = config_dict.get("observables", {}).get("plotting", {})
+        if not synthetic_plotting_config:
+            synthetic_plotting_config = get_plotting_config(config_dict)
             
-        show_plot = plotting_config.get("show_plot", True)
-        save_plot = plotting_config.get("save_plot", False)
-        title = plotting_config.get("title", "Compartmental Model Simulation")
+        show_plot = synthetic_plotting_config.get("show_plot", True)
+        save_plot = synthetic_plotting_config.get("save_plot", False)
+        title = synthetic_plotting_config.get("title", "Compartmental Model Simulation")
         
         logger.info(f"Plotting configuration - show_plot: {show_plot}, save_plot: {save_plot}")
         

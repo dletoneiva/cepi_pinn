@@ -10,6 +10,14 @@ class CompartmentalModel(abc.ABC):
         - compartment_names: list of compartment labels (e.g. ['S', 'I', 'R'])
     """
 
+    def __init__(self, parameters: dict = None):
+        """Initialize the compartmental model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        self.parameters = parameters or {}
+
     @property
     @abc.abstractmethod
     def compartment_names(self) -> list[str]:
@@ -62,6 +70,14 @@ class CompartmentalModel(abc.ABC):
 class SIRModel(CompartmentalModel):
     """SIR (Susceptible-Infected-Recovered) epidemiological model."""
 
+    def __init__(self, parameters: dict = None):
+        """Initialize the SIR model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        super().__init__(parameters=parameters)
+
     @property
     def compartment_names(self) -> list[str]:
         return ['S', 'I', 'R']
@@ -99,6 +115,14 @@ class SIRModel(CompartmentalModel):
 class SEIRModel(CompartmentalModel):
     """SEIR (Susceptible-Exposed-Infected-Recovered) epidemiological model."""
 
+    def __init__(self, parameters: dict = None):
+        """Initialize the SEIR model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        super().__init__(parameters=parameters)
+
     @property
     def compartment_names(self) -> list[str]:
         return ['S', 'E', 'I', 'R']
@@ -120,6 +144,14 @@ class SEIRModel(CompartmentalModel):
 class SIModel(CompartmentalModel):
     """SI (Susceptible-Infected) epidemiological model (no recovery)."""
 
+    def __init__(self, parameters: dict = None):
+        """Initialize the SI model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        super().__init__(parameters=parameters)
+
     @property
     def compartment_names(self) -> list[str]:
         return ['S', 'I']
@@ -136,6 +168,14 @@ class SIModel(CompartmentalModel):
 
 class SISModel(CompartmentalModel):
     """SIS (Susceptible-Infected-Susceptible) epidemiological model."""
+
+    def __init__(self, parameters: dict = None):
+        """Initialize the SIS model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        super().__init__(parameters=parameters)
 
     @property
     def compartment_names(self) -> list[str]:
@@ -154,6 +194,14 @@ class SISModel(CompartmentalModel):
 
 class SIRVModel(CompartmentalModel):
     """SIRV (Susceptible-Infected-Recovered-Vaccinated) epidemiological model."""
+
+    def __init__(self, parameters: dict = None):
+        """Initialize the SIRV model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        super().__init__(parameters=parameters)
 
     @property
     def compartment_names(self) -> list[str]:
@@ -175,6 +223,14 @@ class SIRVModel(CompartmentalModel):
 
 class SIRDModel(CompartmentalModel):
     """SIRD (Susceptible-Infected-Recovered-Dead) epidemiological model."""
+
+    def __init__(self, parameters: dict = None):
+        """Initialize the SIRD model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        super().__init__(parameters=parameters)
 
     @property
     def compartment_names(self) -> list[str]:
@@ -200,6 +256,14 @@ class SIRDModel(CompartmentalModel):
 
 class SIRDVModel(CompartmentalModel):
     """SIRDV (Susceptible-Infected-Recovered-Dead-Vaccinated) epidemiological model."""
+
+    def __init__(self, parameters: dict = None):
+        """Initialize the SIRDV model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        super().__init__(parameters=parameters)
 
     @property
     def compartment_names(self) -> list[str]:
@@ -228,6 +292,14 @@ class SIRDVModel(CompartmentalModel):
 class SEIRDModel(CompartmentalModel):
     """SEIRD (Susceptible-Exposed-Infected-Recovered-Dead) epidemiological model."""
 
+    def __init__(self, parameters: dict = None):
+        """Initialize the SEIRD model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        super().__init__(parameters=parameters)
+
     @property
     def compartment_names(self) -> list[str]:
         return ['S', 'E', 'I', 'R', 'D']
@@ -255,6 +327,14 @@ class SEIRDModel(CompartmentalModel):
 class SEIRVModel(CompartmentalModel):
     """SEIRV (Susceptible-Exposed-Infected-Recovered-Vaccinated) epidemiological model."""
 
+    def __init__(self, parameters: dict = None):
+        """Initialize the SEIRV model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        super().__init__(parameters=parameters)
+
     @property
     def compartment_names(self) -> list[str]:
         return ['S', 'E', 'I', 'R', 'V']
@@ -277,6 +357,14 @@ class SEIRVModel(CompartmentalModel):
 
 class SEIRDVModel(CompartmentalModel):
     """SEIRDV (Susceptible-Exposed-Infected-Recovered-Dead-Vaccinated) epidemiological model."""
+
+    def __init__(self, parameters: dict = None):
+        """Initialize the SEIRDV model with parameters.
+        
+        Args:
+            parameters: Dictionary of model parameters
+        """
+        super().__init__(parameters=parameters)
 
     @property
     def compartment_names(self) -> list[str]:

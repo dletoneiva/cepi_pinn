@@ -83,7 +83,10 @@ def create_model_from_config(config: Dict[str, Any]) -> Any:
     model_type = config["compartmental"]["model"]["type"]
     logger.info(f"Creating model instance for {model_type}")
     model_class = get_model_class(model_type)
-    return model_class()
+    
+    # Extract parameters from config
+    model_params = get_model_parameters(config)
+    return model_class(parameters=model_params)
 
 
 def get_model_parameters(config: Dict[str, Any]) -> Dict[str, float]:

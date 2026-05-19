@@ -133,9 +133,8 @@ class PINNTrainer:
             du_dt.append(grad)
         du_dt = torch.cat(du_dt, dim=1)
         
-        # Get physics residuals - use physics_params from config if provided, otherwise use empty dict
-        physics_params = self.config.get('physics_params', {})
-        physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, physics_params)
+        # Get physics residuals - use the physics model's internal parameters instead of empty config dictionary
+        physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, self.physics_model.parameters)
         physics_loss = torch.mean((du_dt - physics_residuals) ** 2)
 
         # Total loss
@@ -221,8 +220,11 @@ class PINNTrainer:
             if len(t_array) == 0:
                 raise ValueError("No time data provided for training.")
             
-            # Convert to tensors and ensure they're on the correct device
-            t_tensor = torch.tensor(t_array, dtype=torch.float32).view(-1, 1).to(self.device)
+            # Convert to tensors and ensure they're on the correct device - fix tensor construction warning
+            if torch.is_tensor(t_array):
+                t_tensor = t_array.clone().detach().to(dtype=torch.float32).view(-1, 1).to(self.device)
+            else:
+                t_tensor = torch.as_tensor(t_array, dtype=torch.float32).view(-1, 1).to(self.device)
             
             # Check tensor dimensions
             if t_tensor.nelement() == 0:

@@ -34,7 +34,7 @@ class PINNTrainer:
         self.model.to(self.device)
         
         # Extract original physics model parameters from config
-        self.physics_params = config.get('compartmental', {}).get('model', {}).get('parameters', {})
+        self.original_physics_params = config.get('compartmental', {}).get('model', {}).get('parameters', {})
         
         # Check MLflow configuration
         self.mlflow_config = self.config.get('mlflow', {})
@@ -44,24 +44,22 @@ class PINNTrainer:
         self.learnable_params = nn.ParameterDict()
         learnable_param_names = self.config.get("learnable_parameters", [])
         
-        # Validate and inject learnable parameters
-        for param_name in learnable_param_names:
-            # Check if parameter exists in the physics model
-            if param_name not in self.physics_params:
-                raise ValueError(f"Parameter '{param_name}' not found in physics model parameters. "
-                               f"Available parameters: {list(self.physics_params.keys())}")
-            
-            # Extract base value
-            base_value = self.physics_params[param_name]
-            
-            # Create PyTorch parameter
-            p = nn.Parameter(torch.tensor(base_value, dtype=torch.float32))
-            
-            # Store in dictionary
-            self.learnable_params[param_name] = p
-            
-            # Update physics params with learnable parameter
-            self.physics_params[param_name] = p
+        # Create a copy of parameters that will be used for physics calculations
+        # Some will be learnable (nn.Parameters), others will be fixed values
+        self.physics_params = {}
+        
+        # Process all parameters - decide which are learnable based on config
+        for param_name, param_value in self.original_physics_params.items():
+            if param_name in learnable_param_names:
+                # This parameter should be learnable
+                p = nn.Parameter(torch.tensor(param_value, dtype=torch.float32))
+                self.learnable_params[param_name] = p
+                self.physics_params[param_name] = p
+                logger.info(f"Parameter '{param_name}' is learnable")
+            else:
+                # This parameter is fixed (not learnable)
+                self.physics_params[param_name] = param_value
+                logger.info(f"Parameter '{param_name}' is fixed")
 
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """
@@ -136,7 +134,7 @@ class PINNTrainer:
             du_dt.append(grad)
         du_dt = torch.cat(du_dt, dim=1)
         
-        # Get physics residuals - use the physics parameters dictionary from config
+        # Get physics residuals - use the processed physics parameters (mix of learnable and fixed)
         physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, self.physics_params)
         physics_loss = torch.mean((du_dt - physics_residuals) ** 2)
 
@@ -200,14 +198,13 @@ class PINNTrainer:
                 except Exception as e:
                     logger.warning(f"Failed to log parameters to MLflow: {e}")
                 
-                # Log physics parameters if available
+                # Log original physics parameters if available
                 try:
-                    physics_params = self.config.get('physics_params', {})
-                    if physics_params:
-                        mlflow.log_params(physics_params)
-                        logger.info("Logged physics parameters to MLflow")
+                    if self.original_physics_params:
+                        mlflow.log_params({f"original_{k}": v for k, v in self.original_physics_params.items()})
+                        logger.info("Logged original physics parameters to MLflow")
                 except Exception as e:
-                    logger.warning(f"Failed to log physics parameters to MLflow: {e}")
+                    logger.warning(f"Failed to log original physics parameters to MLflow: {e}")
                     
             except Exception as e:
                 logger.warning(f"Failed to set up MLflow: {e}")

@@ -43,32 +43,25 @@ class PINNTrainer:
         self.learnable_params = nn.ParameterDict()
         learnable_param_names = self.config.get("learnable_parameters", [])
         
-        # Create a copy of parameters that will be used for physics calculations
-        # Some will be learnable (nn.Parameters), others will be fixed values
-        self.physics_params = {}
-        
-        # Process all parameters - decide which are learnable based on config
+        # Process learnable parameters - extract from model's parameters and replace with Parameters
         for param_name in learnable_param_names:
-            if param_name in self.original_physics_params:
-                # This parameter should be learnable
-                p = nn.Parameter(torch.tensor(self.original_physics_params[param_name], dtype=torch.float32))
+            if param_name in self.physics_model.parameters:
+                # Extract the initial value from the model's parameters
+                base_value = self.physics_model.parameters[param_name]
+                # Create a learnable parameter
+                p = nn.Parameter(torch.tensor(base_value, dtype=torch.float32))
+                # Store in our learnable parameters
                 self.learnable_params[param_name] = p
-                self.physics_params[param_name] = p
-                logger.info(f"Parameter '{param_name}' is learnable with initial value {self.original_physics_params[param_name]}")
+                # Replace the value in the physics model's parameters dictionary
+                self.physics_model.parameters[param_name] = p
+                logger.info(f"Parameter '{param_name}' is learnable with initial value {base_value}")
             else:
-                # Parameter not found in original params but marked as learnable - initialize with a reasonable value
+                # Parameter not found in model but marked as learnable - initialize with a reasonable value
                 initial_value = 0.1  # Default small positive value for most physics parameters
                 p = nn.Parameter(torch.tensor(initial_value, dtype=torch.float32))
                 self.learnable_params[param_name] = p
-                self.physics_params[param_name] = p
-                logger.warning(f"Parameter '{param_name}' marked as learnable but not found in original params. Initialized to {initial_value}")
-        
-        # Add remaining non-learnable parameters
-        for param_name, param_value in self.original_physics_params.items():
-            if param_name not in self.learnable_params:
-                # This parameter is fixed (not learnable)
-                self.physics_params[param_name] = param_value
-                logger.info(f"Parameter '{param_name}' is fixed with value {param_value}")
+                self.physics_model.parameters[param_name] = p
+                logger.warning(f"Parameter '{param_name}' marked as learnable but not found in model parameters. Initialized to {initial_value}")
 
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """
@@ -143,8 +136,8 @@ class PINNTrainer:
             du_dt.append(grad)
         du_dt = torch.cat(du_dt, dim=1)
         
-        # Get physics residuals - use the processed physics parameters (mix of learnable and fixed)
-        physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, self.physics_params)
+        # Get physics residuals - use the model's internal parameters dictionary
+        physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, self.physics_model.parameters)
         physics_loss = torch.mean((du_dt - physics_residuals) ** 2)
 
         # Total loss

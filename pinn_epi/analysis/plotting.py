@@ -4,6 +4,7 @@ from typing import Optional
 import datetime
 import textwrap
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from pinn_epi.constants import PLOT_STYLE, GREEK_LETTERS, COMPARTMENT_COLORS
 
@@ -86,3 +87,96 @@ def plot_compartmental_solution(
         plt.show()
 
     return fig, ax
+
+
+def plot_actual_vs_predicted(
+    actual_data: dict[str, np.ndarray], 
+    predicted_data: dict[str, np.ndarray],
+    t_data: np.ndarray,
+    compartment_colors: Optional[dict[str, str]] = None,
+    show: bool = False,
+    save_path: Optional[str] = None,
+    plot_config: Optional[dict] = None
+) -> tuple[plt.Figure, plt.Axes]:
+    """
+    Create a stacked plot comparing actual vs predicted compartments/parameters.
+
+    Args:
+        actual_data: Dictionary containing actual compartment/parameter values over time
+        predicted_data: Dictionary containing predicted compartment/parameter values over time
+        t_data: Time array
+        compartment_colors: Color mapping for compartments
+        show: Whether to display the plot
+        save_path: Path to save the plot
+        plot_config: Configuration specifying what to plot
+
+    Returns:
+        Figure and axes objects
+    """
+    apply_plot_style()
+    
+    if compartment_colors is None:
+        compartment_colors = COMPARTMENT_COLORS
+
+    # Determine which items to plot based on plot_config
+    compartments_to_plot = []
+    if plot_config and "compartments_to_plot" in plot_config:
+        compartments_to_plot = plot_config["compartments_to_plot"]
+    else:
+        # Get common keys between actual and predicted data
+        actual_keys = set(actual_data.keys())
+        predicted_keys = set(predicted_data.keys())
+        compartments_to_plot = sorted(list(actual_keys.intersection(predicted_keys)))
+    
+    # Validation: check if specified compartments exist in both datasets
+    for comp in compartments_to_plot:
+        if comp not in actual_data:
+            raise ValueError(f"Compartment '{comp}' specified in plot_config but not found in actual_data")
+        if comp not in predicted_data:
+            raise ValueError(f"Compartment '{comp}' specified in plot_config but not found in predicted_data")
+    
+    if not compartments_to_plot:
+        raise ValueError("No compartments found to plot - check that actual and predicted data have common keys")
+    
+    # Create subplots - one for each compartment to plot
+    n_comps = len(compartments_to_plot)
+    fig, axes = plt.subplots(n_comps, 1, figsize=(12, 4 * n_comps), dpi=300)
+    
+    # Handle case where there's only one subplot
+    if n_comps == 1:
+        axes = [axes]
+
+    # Plot each compartment
+    for idx, comp in enumerate(compartments_to_plot):
+        actual_values = actual_data[comp]
+        predicted_values = predicted_data[comp]
+        color = compartment_colors.get(comp, f'C{idx}')
+        
+        # Plot actual data as solid line
+        axes[idx].plot(t_data, actual_values, label=f'Actual {comp}', color=color, lw=2, linestyle='-', zorder=2)
+        
+        # Plot predicted data as dashed line with different style
+        axes[idx].plot(t_data, predicted_values, label=f'Predicted {comp}', color=color, lw=3, linestyle='--', zorder=3)
+        
+        axes[idx].set_ylabel(f'{comp}', fontsize=PLOT_STYLE['axes.labelsize'])
+        axes[idx].grid(True, linestyle='--', alpha=0.3, zorder=1)
+        axes[idx].tick_params(axis='x', labelsize=PLOT_STYLE['xtick.labelsize'])
+        axes[idx].tick_params(axis='y', labelsize=PLOT_STYLE['ytick.labelsize'])
+        
+        # Add legend to each subplot
+        axes[idx].legend(fontsize=PLOT_STYLE['legend.fontsize'], loc='upper right')
+
+    # Set x-label for the bottom subplot
+    axes[-1].set_xlabel('Time', fontsize=PLOT_STYLE['axes.labelsize'])
+
+    fig.suptitle('Actual vs Predicted Compartments/Parameters Comparison', fontsize=PLOT_STYLE['figure.titlesize'])
+    plt.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, dpi=300)
+        print(f"Saved comparison plot → {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig, axes

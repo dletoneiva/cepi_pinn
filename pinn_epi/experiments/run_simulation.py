@@ -8,6 +8,7 @@ import logging
 import os
 from datetime import datetime
 from typing import Dict, Any
+import pandas as pd
 
 from pinn_epi.configs.model_loader import (
     validate_model_config, 
@@ -21,7 +22,7 @@ from pinn_epi.configs.model_loader import (
     get_data_config
 )
 from pinn_epi.analysis.evaluator import solve_compartmental_model
-from pinn_epi.analysis.plotting import plot_compartmental_solution
+from pinn_epi.analysis.plotting import plot_compartmental_solution, plot_actual_vs_predicted
 from pinn_epi.analysis.data_wrangler import save_simulation_data, DataWrangler
 from pinn_epi.training.trainer import PINNTrainer
 from pinn_epi.models.networks import ModularPINN, BaseMLP, TimeNormalizationEncoder, HardICHead
@@ -213,6 +214,55 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         
         result["trained_pinn"] = pinn_model
         logger.info("PINN training completed successfully")
+        
+        # Generate predictions from trained model
+        logger.info("Generating predictions from trained model")
+        with torch.no_grad():
+            t_tensor = torch.tensor(t_eval, dtype=torch.float32).unsqueeze(1)
+            predicted_trajectories_raw = pinn_model(t_tensor)
+            predicted_trajectories = predicted_trajectories_raw.cpu().numpy()
+        
+        # Format predicted trajectories
+        predicted_dict = {}
+        for i, name in enumerate(model.compartment_names):
+            predicted_dict[name] = predicted_trajectories[:, i]
+        
+        # Plot actual vs predicted if requested
+        plotting_config = config_dict.get("plotting", {})
+        show_comparison = plotting_config.get("show_comparison_plot", False)
+        save_comparison = plotting_config.get("save_comparison_plot", False)
+        
+        if show_comparison or save_comparison:
+            logger.info("Creating actual vs predicted comparison plot")
+            
+            # Determine save path if saving is requested
+            comparison_save_path = None
+            if save_comparison:
+                hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                model_type = config_dict["compartmental"]["model"]["type"]
+                comparison_save_path = f"{hydra_output_dir}/{model_type}_comparison_{timestamp}.pdf"
+                
+                # Ensure the directory exists
+                os.makedirs(hydra_output_dir, exist_ok=True)
+                logger.info(f"Comparison plot will be saved to: {comparison_save_path}")
+            
+            # Call the new plotting function
+            comparison_fig, comparison_axes = plot_actual_vs_predicted(
+                actual_data=trajectories,
+                predicted_data=predicted_dict,
+                t_data=t_eval,
+                show=show_comparison,
+                save_path=comparison_save_path,
+                plot_config=config_dict.get("plotting", {})
+            )
+            
+            result["comparison_figure"] = comparison_fig
+            result["comparison_axes"] = comparison_axes
+            
+            if comparison_save_path:
+                result["comparison_save_path"] = comparison_save_path
+                logger.info(f"Comparison plot saved to: {comparison_save_path}")
     
     logger.info("Simulation run completed successfully")
     return result

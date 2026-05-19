@@ -13,3 +13,6 @@ numerical_ode_params:
 plotting:
   show_plot: true
   save_plot: false
+  show_comparison_plot: false
+  save_comparison_plot: false
+  compartments_to_plot: []

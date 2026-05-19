@@ -200,13 +200,12 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         # Create PINN model using the network configuration
         pinn_model = create_pinn_model(network_config, model.compartment_names, y0, t_span)
         
-        # Create trainer - pass the physics params that were used to generate the data
+        # Create trainer
         trainer = PINNTrainer(
             model=pinn_model,
             physics_model=model,  # The compartmental model for physics loss
             data=training_tensors,  # Pass the mapped dictionary directly
-            config=training_config,
-            original_physics_params=params  # Pass the original physics parameters from run_simulation
+            config=training_config
         )
         
         # Run training

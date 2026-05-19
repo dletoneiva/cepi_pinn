@@ -16,7 +16,7 @@ import os
 logger = logging.getLogger(__name__)
 
 class PINNTrainer:
-    def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict, original_physics_params: Dict[str, float]):
+    def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict):
         """
         Initialize the PINNTrainer.
 
@@ -25,13 +25,11 @@ class PINNTrainer:
             physics_model: The physics model used for calculating residuals.
             data: A dictionary containing the empirical data with compartment names as keys.
             config: Configuration dictionary for training parameters.
-            original_physics_params: Dictionary containing the original physics model parameters from run_simulation
         """
         self.model = model
         self.physics_model = physics_model
         self.data = data
         self.config = config
-        self.original_physics_params = original_physics_params
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         
@@ -199,15 +197,6 @@ class PINNTrainer:
                     logger.info("Logged training parameters to MLflow")
                 except Exception as e:
                     logger.warning(f"Failed to log parameters to MLflow: {e}")
-                
-                # Log original physics parameters if available
-                try:
-                    if self.original_physics_params:
-                        mlflow.log_params({f"original_{k}": v for k, v in self.original_physics_params.items()})
-                        logger.info("Logged original physics parameters to MLflow")
-                except Exception as e:
-                    logger.warning(f"Failed to log original physics parameters to MLflow: {e}")
-                    
             except Exception as e:
                 logger.warning(f"Failed to set up MLflow: {e}")
                 self.mlflow_enabled = False  # Disable MLflow for the rest of training

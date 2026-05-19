@@ -12,8 +12,9 @@ log_interval: 10
 data_weight: 1.0
 physics_weight: 1.0
 
-# Physics parameters (will be passed to the physics model)
-physics_params: {}
+# Learnable physics parameters (will be optimized during training)
+# Example: learnable_parameters: ["beta", "gamma"]
+learnable_parameters: []
 
 # MLflow settings
 mlflow:

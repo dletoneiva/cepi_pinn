@@ -1,6 +1,7 @@
 """Training orchestrator for PINN models."""
 
 import torch
+import torch.nn as nn
 import numpy as np
 import logging
 from typing import Dict, Any, Tuple, Optional
@@ -35,6 +36,29 @@ class PINNTrainer:
         # Check MLflow configuration
         self.mlflow_config = self.config.get('mlflow', {})
         self.mlflow_enabled = self.mlflow_config.get('enabled', True)
+        
+        # Initialize learnable parameters
+        self.learnable_params = nn.ParameterDict()
+        learnable_param_names = self.config.get("learnable_parameters", [])
+        
+        # Validate and inject learnable parameters
+        for param_name in learnable_param_names:
+            # Check if parameter exists in the physics model
+            if not hasattr(self.physics_model, 'parameters') or param_name not in self.physics_model.parameters:
+                raise ValueError(f"Parameter '{param_name}' not found in physics model parameters. "
+                               f"Available parameters: {list(getattr(self.physics_model, 'parameters', {}).keys())}")
+            
+            # Extract base value
+            base_value = self.physics_model.parameters[param_name]
+            
+            # Create PyTorch parameter
+            p = nn.Parameter(torch.tensor(base_value, dtype=torch.float32))
+            
+            # Store in dictionary
+            self.learnable_params[param_name] = p
+            
+            # Inject back into physics model
+            self.physics_model.parameters[param_name] = p
 
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """
@@ -167,7 +191,8 @@ class PINNTrainer:
                         "adam_epochs": self.config.get('adam_epochs', 5000),
                         "n_collocation_points": self.config.get('n_collocation_points', 100),
                         "data_weight": self.config.get('data_weight', 1.0),
-                        "physics_weight": self.config.get('physics_weight', 1.0)
+                        "physics_weight": self.config.get('physics_weight', 1.0),
+                        "learnable_parameters": str(self.config.get('learnable_parameters', []))
                     })
                     logger.info("Logged training parameters to MLflow")
                 except Exception as e:
@@ -203,9 +228,10 @@ class PINNTrainer:
             if t_tensor.nelement() == 0:
                 raise ValueError("Time tensor is empty after conversion.")
                 
-            # Optimizers
-            optimizer_adam = torch.optim.Adam(self.model.parameters(), lr=self.config.get('adam_lr', 1e-3))
-            optimizer_lbfgs = torch.optim.LBFGS(self.model.parameters(), 
+            # Optimizers - include both network parameters and learnable physics parameters
+            trainable_vars = list(self.model.parameters()) + list(self.learnable_params.parameters())
+            optimizer_adam = torch.optim.Adam(trainable_vars, lr=self.config.get('adam_lr', 1e-3))
+            optimizer_lbfgs = torch.optim.LBFGS(trainable_vars, 
                                               max_iter=self.config.get('lbfgs_max_iter', 100), 
                                               line_search_fn="strong_wolfe")
 
@@ -243,6 +269,16 @@ class PINNTrainer:
                                 logger.debug(f"Logged metrics to MLflow at epoch {epoch}")
                         except Exception as e:
                             logger.warning(f"Failed to log metrics to MLflow at epoch {epoch}: {e}")
+                    
+                    # Log learnable parameters if MLflow is enabled
+                    if self.mlflow_enabled and len(self.learnable_params) > 0:
+                        try:
+                            if mlflow.active_run():
+                                param_dict = {name: param.item() for name, param in self.learnable_params.items()}
+                                mlflow.log_metrics(param_dict, step=epoch)
+                                logger.debug(f"Logged learnable parameters to MLflow at epoch {epoch}")
+                        except Exception as e:
+                            logger.warning(f"Failed to log learnable parameters to MLflow at epoch {epoch}: {e}")
 
             # L-BFGS phase
             def closure():

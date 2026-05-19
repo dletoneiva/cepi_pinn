@@ -48,17 +48,27 @@ class PINNTrainer:
         self.physics_params = {}
         
         # Process all parameters - decide which are learnable based on config
-        for param_name, param_value in self.original_physics_params.items():
-            if param_name in learnable_param_names:
+        for param_name in learnable_param_names:
+            if param_name in self.original_physics_params:
                 # This parameter should be learnable
-                p = nn.Parameter(torch.tensor(param_value, dtype=torch.float32))
+                p = nn.Parameter(torch.tensor(self.original_physics_params[param_name], dtype=torch.float32))
                 self.learnable_params[param_name] = p
                 self.physics_params[param_name] = p
-                logger.info(f"Parameter '{param_name}' is learnable")
+                logger.info(f"Parameter '{param_name}' is learnable with initial value {self.original_physics_params[param_name]}")
             else:
+                # Parameter not found in original params but marked as learnable - initialize with a reasonable value
+                initial_value = 0.1  # Default small positive value for most physics parameters
+                p = nn.Parameter(torch.tensor(initial_value, dtype=torch.float32))
+                self.learnable_params[param_name] = p
+                self.physics_params[param_name] = p
+                logger.warning(f"Parameter '{param_name}' marked as learnable but not found in original params. Initialized to {initial_value}")
+        
+        # Add remaining non-learnable parameters
+        for param_name, param_value in self.original_physics_params.items():
+            if param_name not in self.learnable_params:
                 # This parameter is fixed (not learnable)
                 self.physics_params[param_name] = param_value
-                logger.info(f"Parameter '{param_name}' is fixed")
+                logger.info(f"Parameter '{param_name}' is fixed with value {param_value}")
 
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """

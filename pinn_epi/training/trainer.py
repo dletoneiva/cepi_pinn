@@ -47,7 +47,7 @@ class PINNTrainer:
                 # Extract the initial value from the model's parameters
                 base_value = self.physics_model.parameters[param_name]
                 # Create a learnable parameter
-                p = nn.Parameter(torch.tensor(base_value, dtype=torch.float32))
+                p = nn.Parameter(torch.tensor(base_value, dtype=torch.float32, device=self.device))
                 # Store in our learnable parameters
                 self.learnable_params[param_name] = p
                 # Replace the value in the physics model's parameters dictionary
@@ -56,7 +56,7 @@ class PINNTrainer:
             else:
                 # Parameter not found in model but marked as learnable - initialize with a reasonable value
                 initial_value = 0.1  # Default small positive value for most physics parameters
-                p = nn.Parameter(torch.tensor(initial_value, dtype=torch.float32))
+                p = nn.Parameter(torch.tensor(initial_value, dtype=torch.float32, device=self.device))
                 self.learnable_params[param_name] = p
                 self.physics_model.parameters[param_name] = p
                 logger.warning(f"Parameter '{param_name}' marked as learnable but not found in model parameters. Initialized to {initial_value}")

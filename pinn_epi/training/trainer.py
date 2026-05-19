@@ -16,7 +16,7 @@ import os
 logger = logging.getLogger(__name__)
 
 class PINNTrainer:
-    def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict):
+    def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict, original_physics_params: Dict[str, float]):
         """
         Initialize the PINNTrainer.
 
@@ -25,16 +25,15 @@ class PINNTrainer:
             physics_model: The physics model used for calculating residuals.
             data: A dictionary containing the empirical data with compartment names as keys.
             config: Configuration dictionary for training parameters.
+            original_physics_params: Dictionary containing the original physics model parameters from run_simulation
         """
         self.model = model
         self.physics_model = physics_model
         self.data = data
         self.config = config
+        self.original_physics_params = original_physics_params
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
-        
-        # Extract original physics model parameters from config
-        self.original_physics_params = config.get('compartmental', {}).get('model', {}).get('parameters', {})
         
         # Check MLflow configuration
         self.mlflow_config = self.config.get('mlflow', {})

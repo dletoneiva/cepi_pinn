@@ -197,6 +197,13 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         # Get training tensors for observed variables only
         training_tensors = data_wrangler.get_training_tensors()
         
+        # Format data for trainer - extract 't' and 'y' arrays
+        # The trainer expects a dict with 't' (time points) and 'y' (values)
+        formatted_training_data = {
+            't': training_tensors['t'].numpy(),
+            'y': training_tensors['y'].numpy()
+        }
+        
         # Create PINN model using the network configuration
         pinn_model = create_pinn_model(network_config, model.compartment_names, y0, t_span)
         
@@ -204,7 +211,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         trainer = PINNTrainer(
             model=pinn_model,
             physics_model=model,  # The compartmental model for physics loss
-            data=training_tensors,
+            data=formatted_training_data,
             config=training_config
         )
         

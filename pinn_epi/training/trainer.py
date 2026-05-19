@@ -33,6 +33,9 @@ class PINNTrainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         
+        # Extract original physics model parameters from config
+        self.physics_params = config.get('compartmental', {}).get('model', {}).get('parameters', {})
+        
         # Check MLflow configuration
         self.mlflow_config = self.config.get('mlflow', {})
         self.mlflow_enabled = self.mlflow_config.get('enabled', True)
@@ -44,12 +47,12 @@ class PINNTrainer:
         # Validate and inject learnable parameters
         for param_name in learnable_param_names:
             # Check if parameter exists in the physics model
-            if not hasattr(self.physics_model, 'parameters') or param_name not in self.physics_model.parameters:
+            if param_name not in self.physics_params:
                 raise ValueError(f"Parameter '{param_name}' not found in physics model parameters. "
-                               f"Available parameters: {list(getattr(self.physics_model, 'parameters', {}).keys())}")
+                               f"Available parameters: {list(self.physics_params.keys())}")
             
             # Extract base value
-            base_value = self.physics_model.parameters[param_name]
+            base_value = self.physics_params[param_name]
             
             # Create PyTorch parameter
             p = nn.Parameter(torch.tensor(base_value, dtype=torch.float32))
@@ -57,8 +60,8 @@ class PINNTrainer:
             # Store in dictionary
             self.learnable_params[param_name] = p
             
-            # Inject back into physics model
-            self.physics_model.parameters[param_name] = p
+            # Update physics params with learnable parameter
+            self.physics_params[param_name] = p
 
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """
@@ -133,8 +136,8 @@ class PINNTrainer:
             du_dt.append(grad)
         du_dt = torch.cat(du_dt, dim=1)
         
-        # Get physics residuals - use the physics model's internal parameters instead of empty config dictionary
-        physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, self.physics_model.parameters)
+        # Get physics residuals - use the physics parameters dictionary from config
+        physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, self.physics_params)
         physics_loss = torch.mean((du_dt - physics_residuals) ** 2)
 
         # Total loss

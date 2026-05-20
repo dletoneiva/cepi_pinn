@@ -115,13 +115,20 @@ def create_pinn_model(network_config: dict, compartment_names: list, initial_con
     input_dim = 1  # time dimension
     output_dim = output_size
     hidden_dims = [backbone_config.get("layer_size", 50)] * backbone_config.get("num_layers", 3)
+    
+    # Handle activation function - convert string to class
     activation_name = backbone_config.get("activation", "Tanh")
+    if isinstance(activation_name, str):
+        # Convert string to actual activation class
+        activation = getattr(torch.nn, activation_name)
+    else:
+        activation = activation_name
     
     backbone = BaseMLP(
         input_dim=input_dim,
         hidden_dims=hidden_dims,
         output_dim=output_dim,
-        activation=getattr(torch.nn, activation_name)
+        activation=activation
     )
     
     # Create encoder if specified

@@ -26,7 +26,7 @@ from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.plotting import plot_compartmental_solution, plot_actual_vs_predicted
 from pinn_epi.analysis.data_wrangler import save_simulation_data, DataWrangler
 from pinn_epi.training.trainer import PINNTrainer
-from pinn_epi.models.networks import ModularPINN, BaseMLP, TimeNormalizationEncoder, HardICHead
+from pinn_epi.models.networks import ModularPINN, BaseMLP, TimeNormalizationEncoder, HardICHead, create_pinn_model
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -284,68 +284,6 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     logger.info("Simulation run completed successfully")
     return result
 
-def create_pinn_model(network_config: dict, compartment_names: list, initial_conditions: list, t_span: list, output_size: int) -> ModularPINN:
-    """Create a PINN model from network configuration.
-    
-    Args:
-        network_config: Configuration for the neural network
-        compartment_names: Names of compartments in the model
-        initial_conditions: Initial conditions for each compartment
-        t_span: Time span [t_start, t_end]
-        output_size: Number of output dimensions (compartments)
-        
-    Returns:
-        Configured ModularPINN model
-    """
-    
-    # Create network backbone
-    backbone_config = network_config.get("backbone", {})
-    input_dim = 1  # time dimension
-    output_dim = output_size
-    hidden_dims = [backbone_config.get("layer_size", 50)] * backbone_config.get("num_layers", 3)
-    activation_name = backbone_config.get("activation", "Tanh")
-    
-    backbone = BaseMLP(
-        input_dim=input_dim,
-        hidden_dims=hidden_dims,
-        output_dim=output_dim,
-        activation=getattr(torch.nn, activation_name)
-    )
-    
-    # Create encoder if specified
-    encoder = None
-    if network_config.get("encoder") == "time_normalization":
-        encoder = TimeNormalizationEncoder(
-            t0=float(t_span[0]),
-            t1=float(t_span[1])
-        )
-    
-    # Create initial condition head if specified
-    head = None
-    if network_config.get("head") == "hardIC":
-        initial_conditions_tensor = torch.tensor(initial_conditions, dtype=torch.float32)
-        head = HardICHead(
-            initial_conditions=initial_conditions_tensor,
-            t0=float(t_span[0]),
-            t1=float(t_span[1])
-        )
-    
-    # Create modular PINN
-    pinn_model = ModularPINN(
-        backbone=backbone,
-        head=head,
-        encoder=encoder
-    )
-    
-    # Set the device for the model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    pinn_model.to(device)
-    
-    # Add device property to access the device
-    pinn_model.device = device
-    
-    return pinn_model
-        
 @hydra.main(version_base=None, config_path="../../configs", config_name="base")
 def main(cfg: DictConfig) -> None:
     """Run simulation based on Hydra configuration.

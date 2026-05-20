@@ -26,7 +26,7 @@ from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.plotting import plot_compartmental_solution, plot_actual_vs_predicted
 from pinn_epi.analysis.data_wrangler import save_simulation_data, DataWrangler
 from pinn_epi.training.trainer import PINNTrainer
-from pinn_epi.models.networks import ModularPINN, BaseMLP, TimeNormalizationEncoder, HardICHead, create_pinn_model
+from pinn_epi.models.networks import create_pinn_model
 
 # Set up logging
 logger = logging.getLogger(__name__)

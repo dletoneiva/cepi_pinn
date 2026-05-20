@@ -6,7 +6,7 @@ import textwrap
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from pinn_epi.constants import PLOT_STYLE, GREEK_LETTERS, COMPARTMENT_COLORS
+from pinn_epi.constants import PLOT_STYLE, GREEK_LETTERS, COMPARTMENT_COLORS, SUM_COLOR
 
 
 def apply_plot_style() -> None:
@@ -227,10 +227,9 @@ def plot_actual_vs_predicted(
         if comp in predicted_data:
             sum_predicted += predicted_data[comp]
     
-    # Universal color for sum plot
-    sum_color = 'black'
-    axes[n_comps].plot(t_data, sum_actual, label='Ground Truth Sum', color=sum_color, lw=2, linestyle='-', zorder=2)
-    axes[n_comps].plot(t_data, sum_predicted, label='Predicted Sum', color=sum_color, lw=3, linestyle='--', zorder=3)
+    # Universal color for sum plot (now imported from constants)
+    axes[n_comps].plot(t_data, sum_actual, label='Ground Truth Sum', color=SUM_COLOR, lw=2, linestyle='-', zorder=2)
+    axes[n_comps].plot(t_data, sum_predicted, label='Predicted Sum', color=SUM_COLOR, lw=3, linestyle='--', zorder=3)
     axes[n_comps].set_ylabel('Sum of Compartments', fontsize=PLOT_STYLE['axes.labelsize'])
     axes[n_comps].tick_params(axis='x', labelsize=PLOT_STYLE['xtick.labelsize'])
     axes[n_comps].tick_params(axis='y', labelsize=PLOT_STYLE['ytick.labelsize'])

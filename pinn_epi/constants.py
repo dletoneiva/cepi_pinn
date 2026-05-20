@@ -51,6 +51,9 @@ COMPARTMENT_COLORS = {
     'B': '#B3DE69',  # Light green
 }
 
+# Universal color for sum of compartments plot
+SUM_COLOR = 'black'
+
 # Greek letters for parameter display
 GREEK_LETTERS = {
     'alpha': r'$\alpha$',

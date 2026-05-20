@@ -223,7 +223,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         # Generate predictions from trained model
         logger.info("Generating predictions from trained model")
         with torch.no_grad():
-            t_tensor = torch.tensor(t_eval, dtype=torch.float32).unsqueeze(1)
+            t_tensor = torch.tensor(t_eval, dtype=torch.float32).unsqueeze(1).to(pinn_model.device)
             predicted_trajectories_raw = pinn_model(t_tensor)
             predicted_trajectories = predicted_trajectories_raw.cpu().numpy()
         
@@ -323,6 +323,13 @@ def create_pinn_model(network_config: dict, compartment_names: list, initial_con
         head=head,
         encoder=encoder
     )
+    
+    # Set the device for the model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    pinn_model.to(device)
+    
+    # Add device property to access the device
+    pinn_model.device = device
     
     return pinn_model
         

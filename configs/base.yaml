@@ -11,8 +11,8 @@ numerical_ode_params:
   solve_ode: true
 
 plotting:
-  show_plot: true
-  save_plot: false
-  show_comparison_plot: false
-  save_comparison_plot: false
+  show_compartmental_plot: true
+  save_compartmental_plot: false
+  show_network_prediction_plot: false
+  save_network_prediction_plot: false
   compartments_to_plot: []

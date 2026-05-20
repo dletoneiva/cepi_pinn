@@ -108,20 +108,25 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         show_plot = synthetic_plotting_config.get("show_plot", True)
         save_plot = synthetic_plotting_config.get("save_plot", False)
         
-        logger.info(f"Plotting configuration - show_plot: {show_plot}, save_plot: {save_plot}")
+        # Get compartmental plot config from base plotting config
+        compartmental_plot_config = config_dict.get("plotting", {})
+        show_compartmental_plot = compartmental_plot_config.get("show_compartmental_plot", True)
+        save_compartmental_plot = compartmental_plot_config.get("save_compartmental_plot", False)
+        
+        logger.info(f"Compartmental plotting configuration - show_compartmental_plot: {show_compartmental_plot}, save_compartmental_plot: {save_compartmental_plot}")
         
         # Determine save path if saving is requested
         save_path = None
-        if save_plot:
+        if save_compartmental_plot:
             # Use Hydra's output directory
             hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             model_type = config_dict["compartmental"]["model"]["type"]
-            save_path = f"{hydra_output_dir}/{model_type}_simulation_{timestamp}.pdf"
+            save_path = f"{hydra_output_dir}/{model_type}_compartmental_{timestamp}.pdf"
             
             # Ensure the directory exists
             os.makedirs(hydra_output_dir, exist_ok=True)
-            logger.info(f"Figure will be saved to: {save_path}")
+            logger.info(f"Compartmental figure will be saved to: {save_path}")
         
         # Get model type for plotting
         model_type = config_dict["compartmental"]["model"]["type"]
@@ -129,7 +134,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         fig, ax = plot_compartmental_solution(
             t=t_eval,
             trajectories=trajectories,
-            show=show_plot,
+            show=show_compartmental_plot,
             save_path=save_path,
             model_params=params,
             initial_conditions=y0,
@@ -140,7 +145,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         
         if save_path:
             result["save_path"] = save_path
-            logger.info(f"Figure saved to: {save_path}")
+            logger.info(f"Compartmental figure saved to: {save_path}")
     
     # Handle data saving only if we have trajectories
     if solve_ode:
@@ -229,40 +234,40 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         
         # Plot actual vs predicted if requested
         plotting_config = config_dict.get("plotting", {})
-        show_comparison = plotting_config.get("show_comparison_plot", False)
-        save_comparison = plotting_config.get("save_comparison_plot", False)
+        show_network_prediction = plotting_config.get("show_network_prediction_plot", False)
+        save_network_prediction = plotting_config.get("save_network_prediction_plot", False)
         
-        if show_comparison or save_comparison:
-            logger.info("Creating actual vs predicted comparison plot")
+        if show_network_prediction or save_network_prediction:
+            logger.info("Creating actual vs predicted network prediction plot")
             
             # Determine save path if saving is requested
-            comparison_save_path = None
-            if save_comparison:
+            network_prediction_save_path = None
+            if save_network_prediction:
                 hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 model_type = config_dict["compartmental"]["model"]["type"]
-                comparison_save_path = f"{hydra_output_dir}/{model_type}_comparison_{timestamp}.pdf"
+                network_prediction_save_path = f"{hydra_output_dir}/{model_type}_network_prediction_{timestamp}.pdf"
                 
                 # Ensure the directory exists
                 os.makedirs(hydra_output_dir, exist_ok=True)
-                logger.info(f"Comparison plot will be saved to: {comparison_save_path}")
+                logger.info(f"Network prediction plot will be saved to: {network_prediction_save_path}")
             
             # Call the new plotting function
-            comparison_fig, comparison_axes = plot_actual_vs_predicted(
+            network_prediction_fig, network_prediction_axes = plot_actual_vs_predicted(
                 actual_data=trajectories,
                 predicted_data=predicted_dict,
                 t_data=t_eval,
-                show=show_comparison,
-                save_path=comparison_save_path,
+                show=show_network_prediction,
+                save_path=network_prediction_save_path,
                 plot_config=config_dict.get("plotting", {})
             )
             
-            result["comparison_figure"] = comparison_fig
-            result["comparison_axes"] = comparison_axes
+            result["network_prediction_figure"] = network_prediction_fig
+            result["network_prediction_axes"] = network_prediction_axes
             
-            if comparison_save_path:
-                result["comparison_save_path"] = comparison_save_path
-                logger.info(f"Comparison plot saved to: {comparison_save_path}")
+            if network_prediction_save_path:
+                result["network_prediction_save_path"] = network_prediction_save_path
+                logger.info(f"Network prediction plot saved to: {network_prediction_save_path}")
     
     logger.info("Simulation run completed successfully")
     return result

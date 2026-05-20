@@ -143,7 +143,11 @@ def get_network_config(config: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Network configuration dictionary
     """
-    return config.get('network', {})
+    network_config = config.get('network', {})
+    # Handle potential nested network configuration
+    if 'network' in network_config:
+        network_config = network_config['network']
+    return network_config
 
 
 def get_training_config(config: Dict[str, Any]) -> Dict[str, Any]:

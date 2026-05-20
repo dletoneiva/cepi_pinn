@@ -259,7 +259,9 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
                 t_data=t_eval,
                 show=show_network_prediction,
                 save_path=network_prediction_save_path,
-                plot_config=config_dict.get("plotting", {})
+                plot_config=config_dict.get("plotting", {}),
+                model_compartments=model.compartment_names,
+                training_config=training_config
             )
             
             result["network_prediction_figure"] = network_prediction_fig

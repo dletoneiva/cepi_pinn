@@ -96,7 +96,9 @@ def plot_actual_vs_predicted(
     compartment_colors: Optional[dict[str, str]] = None,
     show: bool = False,
     save_path: Optional[str] = None,
-    plot_config: Optional[dict] = None
+    plot_config: Optional[dict] = None,
+    model_compartments: Optional[list] = None,
+    training_config: Optional[dict] = None
 ) -> tuple[plt.Figure, plt.Axes]:
     """
     Create a stacked plot comparing actual vs predicted compartments/parameters.
@@ -109,6 +111,8 @@ def plot_actual_vs_predicted(
         show: Whether to display the plot
         save_path: Path to save the plot
         plot_config: Configuration specifying what to plot
+        model_compartments: Ordered list of compartment names from the model
+        training_config: Training configuration for summary text
 
     Returns:
         Figure and axes objects
@@ -123,19 +127,20 @@ def plot_actual_vs_predicted(
     if plot_config and "compartments_to_plot" in plot_config:
         compartments_to_plot = plot_config["compartments_to_plot"]
     else:
-        # Get all common keys between actual and predicted data
-        actual_keys = set(actual_data.keys())
-        predicted_keys = set(predicted_data.keys())
-        # If no compartments specified in plot_config, plot all common ones
-        compartments_to_plot = sorted(list(actual_keys.intersection(predicted_keys)))
-    
-    # If still no compartments to plot after defaults, try using the union
-    if not compartments_to_plot:
-        actual_keys = set(actual_data.keys())
-        predicted_keys = set(predicted_data.keys())
-        all_keys = actual_keys.union(predicted_keys)
-        compartments_to_plot = sorted(list(all_keys))
-    
+        # Use the order from model compartments if available
+        if model_compartments:
+            # Filter to only those that exist in both datasets
+            actual_keys = set(actual_data.keys())
+            predicted_keys = set(predicted_data.keys())
+            all_available = actual_keys.intersection(predicted_keys)
+            compartments_to_plot = [comp for comp in model_compartments if comp in all_available]
+        else:
+            # Get all common keys between actual and predicted data
+            actual_keys = set(actual_data.keys())
+            predicted_keys = set(predicted_data.keys())
+            # If no compartments specified in plot_config, plot all common ones
+            compartments_to_plot = sorted(list(actual_keys.intersection(predicted_keys)))
+
     # Validation: check if specified compartments exist in both datasets
     filtered_compartments = []
     for comp in compartments_to_plot:
@@ -147,16 +152,16 @@ def plot_actual_vs_predicted(
                 print(f"Warning: '{comp}' found in predicted data but not in actual data")
             elif comp not in predicted_data:
                 print(f"Warning: '{comp}' found in actual data but not in predicted data")
-    
+
     compartments_to_plot = filtered_compartments
-    
+
     if not compartments_to_plot:
         raise ValueError("No compartments found to plot - check that actual and predicted data have common keys")
-    
+
     # Create subplots - one for each compartment to plot
     n_comps = len(compartments_to_plot)
     fig, axes = plt.subplots(n_comps, 1, figsize=(12, 4 * n_comps), dpi=300)
-    
+
     # Handle case where there's only one subplot
     if n_comps == 1:
         axes = [axes]
@@ -166,29 +171,62 @@ def plot_actual_vs_predicted(
         actual_values = actual_data[comp]
         predicted_values = predicted_data[comp]
         color = compartment_colors.get(comp, f'C{idx}')
-        
-        # Plot actual data as solid line
-        axes[idx].plot(t_data, actual_values, label=f'Actual {comp}', color=color, lw=2, linestyle='-', zorder=2)
-        
+
+        # Plot actual data as solid line (Ground Truth)
+        axes[idx].plot(t_data, actual_values, label=f'Ground Truth {comp}', color=color, lw=2, linestyle='-', zorder=2)
+
         # Plot predicted data as dashed line with different style
         axes[idx].plot(t_data, predicted_values, label=f'Predicted {comp}', color=color, lw=3, linestyle='--', zorder=3)
-        
+
         axes[idx].set_ylabel(f'{comp}', fontsize=PLOT_STYLE['axes.labelsize'])
-        axes[idx].grid(True, linestyle='--', alpha=0.3, zorder=1)
+        # Remove grid
+        # axes[idx].grid(True, linestyle='--', alpha=0.3, zorder=1)
         axes[idx].tick_params(axis='x', labelsize=PLOT_STYLE['xtick.labelsize'])
         axes[idx].tick_params(axis='y', labelsize=PLOT_STYLE['ytick.labelsize'])
-        
-        # Add legend to each subplot
-        axes[idx].legend(fontsize=PLOT_STYLE['legend.fontsize'], loc='upper right')
+
+        # Add legend to each subplot, positioned above the chart
+        axes[idx].legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=2, 
+                         columnspacing=1.5, handletextpad=0.5, fontsize=PLOT_STYLE['legend.fontsize'])
 
     # Set x-label for the bottom subplot
     axes[-1].set_xlabel('Time', fontsize=PLOT_STYLE['axes.labelsize'])
 
     fig.suptitle('Actual vs Predicted Network Prediction Comparison', fontsize=PLOT_STYLE['figure.titlesize'])
-    plt.tight_layout()
+
+    # Add training configuration summary at the bottom
+    if training_config:
+        # Extract relevant parameters for summary
+        data_weight = training_config.get('data_weight', 1.0)
+        physics_weight = training_config.get('physics_weight', 1.0)
+        adam_epochs = training_config.get('adam_epochs', 1000)
+        adam_lr = training_config.get('adam_lr', 0.001)
+        lbfgs_max_iter = training_config.get('lbfgs_max_iter', 50)
+        n_collocation_points = training_config.get('n_collocation_points', 100)
+        
+        # Format learnable parameters
+        learnable_params = training_config.get('learnable_parameters', [])
+        params_str = ', '.join(learnable_params) if learnable_params else 'None'
+
+        # Build summary text
+        summary_text = f"Loss weights: Data={data_weight}, Physics={physics_weight} | " \
+                       f"Adam: epochs={adam_epochs}, lr={adam_lr} | " \
+                       f"LBFGS: max_iter={lbfgs_max_iter} | " \
+                       f"Collocation points: {n_collocation_points} | " \
+                       f"Learned params: {params_str}"
+
+        # Wrap text to fit the figure
+        wrapped_summary = textwrap.fill(summary_text, width=80)
+
+        # Add the summary text below the subplots
+        fig.text(0.5, 0.02, wrapped_summary, ha='center', va='bottom', 
+                 fontsize=10, wrap=True,
+                 bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', edgecolor='gray', alpha=0.8))
+
+    # Adjust subplot spacing to accommodate legends and summary text
+    plt.subplots_adjust(left=0.15, right=0.9, top=0.9, bottom=0.15, hspace=0.5)
 
     if save_path:
-        fig.savefig(save_path, dpi=300)
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Saved network prediction plot → {save_path}")
 
     if show:

@@ -227,7 +227,6 @@ def plot_actual_vs_predicted(
         if comp in predicted_data:
             sum_predicted += predicted_data[comp]
     
-    # Universal color for sum plot (now imported from constants)
     axes[n_comps].plot(t_data, sum_actual, label='Ground Truth Sum', color=SUM_COLOR, lw=2, linestyle='-', zorder=2)
     axes[n_comps].plot(t_data, sum_predicted, label='Predicted Sum', color=SUM_COLOR, lw=3, linestyle='--', zorder=3)
     axes[n_comps].set_ylabel('Sum of Compartments', fontsize=PLOT_STYLE['axes.labelsize'])

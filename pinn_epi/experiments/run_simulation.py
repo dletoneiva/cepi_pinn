@@ -159,7 +159,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         if save_data:
             # Use Hydra's output directory for data as well
             hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-            timestamp = datetime.now().strftime("%Y%mdd_%H%M%S")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             model_type = config_dict["compartmental"]["model"]["type"]
             
             # Ensure the directory exists
@@ -242,8 +242,8 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         
         # Plot actual vs predicted if requested
         plotting_config = config_dict.get("plotting", {})
-        show_network_prediction = plotting_config.get("show_network_prediction_plot", False)
-        save_network_prediction = plotting_config.get("save_network_prediction_plot", False)
+        show_network_prediction = plotting_config.get("show_network_prediction_plot", True)
+        save_network_prediction = plotting_config.get("save_network_prediction_plot", True)
         
         if show_network_prediction or save_network_prediction:
             logger.info("Creating actual vs predicted network prediction plot")

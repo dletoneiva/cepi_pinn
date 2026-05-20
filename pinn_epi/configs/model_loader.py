@@ -143,10 +143,18 @@ def get_network_config(config: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Network configuration dictionary
     """
+    # First check if network config is directly in config
     network_config = config.get('network', {})
-    # Handle potential nested network configuration
-    if 'network' in network_config:
+    
+    # Handle potential nested network configuration (the bug we're fixing)
+    # If the network config has a 'network' key, that means it's nested incorrectly
+    if isinstance(network_config, dict) and 'network' in network_config:
         network_config = network_config['network']
+    
+    # If network_config is still nested, try to flatten it
+    while isinstance(network_config, dict) and 'network' in network_config:
+        network_config = network_config['network']
+        
     return network_config
 
 

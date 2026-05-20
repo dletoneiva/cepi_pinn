@@ -12,7 +12,7 @@ numerical_ode_params:
 
 plotting:
   show_compartmental_plot: true
-  save_compartmental_plot: false
-  show_network_prediction_plot: false
-  save_network_prediction_plot: false
+  save_compartmental_plot: true
+  show_network_prediction_plot: true
+  save_network_prediction_plot: true
   compartments_to_plot: []

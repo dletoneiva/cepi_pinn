@@ -127,19 +127,21 @@ def plot_actual_vs_predicted(
     if plot_config and "compartments_to_plot" in plot_config:
         compartments_to_plot = plot_config["compartments_to_plot"]
     else:
-        # Use the order from model compartments if available
+        # Get all keys from both datasets
+        all_actual_keys = set(actual_data.keys())
+        all_predicted_keys = set(predicted_data.keys())
+        # Find intersection of keys that exist in both datasets
+        common_keys = all_actual_keys.intersection(all_predicted_keys)
+        
         if model_compartments:
-            # Filter to only those that exist in both datasets
-            actual_keys = set(actual_data.keys())
-            predicted_keys = set(predicted_data.keys())
-            all_available = actual_keys.intersection(predicted_keys)
-            compartments_to_plot = [comp for comp in model_compartments if comp in all_available]
+            # Prioritize the order from model compartments if available
+            compartments_to_plot = [comp for comp in model_compartments if comp in common_keys]
+            # Add any remaining common keys not in model_compartments
+            remaining_keys = [comp for comp in sorted(common_keys) if comp not in compartments_to_plot]
+            compartments_to_plot.extend(remaining_keys)
         else:
-            # Get all common keys between actual and predicted data
-            actual_keys = set(actual_data.keys())
-            predicted_keys = set(predicted_data.keys())
-            # If no compartments specified in plot_config, plot all common ones
-            compartments_to_plot = sorted(list(actual_keys.intersection(predicted_keys)))
+            # Sort common keys alphabetically if no specific ordering is provided
+            compartments_to_plot = sorted(list(common_keys))
 
     # Validation: check if specified compartments exist in both datasets
     filtered_compartments = []
@@ -156,6 +158,23 @@ def plot_actual_vs_predicted(
     compartments_to_plot = filtered_compartments
 
     if not compartments_to_plot:
+        # If no common keys, try to plot what exists in each
+        all_actual_keys = set(actual_data.keys())
+        all_predicted_keys = set(predicted_data.keys())
+        
+        # Get compartment names in model order if available
+        if model_compartments:
+            available_compartments = [comp for comp in model_compartments if comp in all_actual_keys or comp in all_predicted_keys]
+        else:
+            # Combine both sets of keys preserving order
+            available_compartments = sorted(list(all_actual_keys.union(all_predicted_keys)))
+        
+        compartments_to_plot = []
+        for comp in available_compartments:
+            if comp in all_actual_keys and comp in all_predicted_keys:
+                compartments_to_plot.append(comp)
+    
+    if not compartments_to_plot:
         raise ValueError("No compartments found to plot - check that actual and predicted data have common keys")
 
     # Create subplots - one for each compartment to plot
@@ -168,25 +187,33 @@ def plot_actual_vs_predicted(
 
     # Plot each compartment
     for idx, comp in enumerate(compartments_to_plot):
-        actual_values = actual_data[comp]
-        predicted_values = predicted_data[comp]
-        color = compartment_colors.get(comp, f'C{idx}')
+        # Only plot if the compartment exists in both datasets
+        if comp in actual_data and comp in predicted_data:
+            actual_values = actual_data[comp]
+            predicted_values = predicted_data[comp]
+            color = compartment_colors.get(comp, f'C{idx}')
 
-        # Plot actual data as solid line (Ground Truth)
-        axes[idx].plot(t_data, actual_values, label=f'Ground Truth {comp}', color=color, lw=2, linestyle='-', zorder=2)
+            # Plot actual data as solid line (Ground Truth)
+            axes[idx].plot(t_data, actual_values, label=f'Ground Truth {comp}', color=color, lw=2, linestyle='-', zorder=2)
 
-        # Plot predicted data as dashed line with different style
-        axes[idx].plot(t_data, predicted_values, label=f'Predicted {comp}', color=color, lw=3, linestyle='--', zorder=3)
+            # Plot predicted data as dashed line with different style
+            axes[idx].plot(t_data, predicted_values, label=f'Predicted {comp}', color=color, lw=3, linestyle='--', zorder=3)
 
-        axes[idx].set_ylabel(f'{comp}', fontsize=PLOT_STYLE['axes.labelsize'])
-        # Remove grid
-        # axes[idx].grid(True, linestyle='--', alpha=0.3, zorder=1)
-        axes[idx].tick_params(axis='x', labelsize=PLOT_STYLE['xtick.labelsize'])
-        axes[idx].tick_params(axis='y', labelsize=PLOT_STYLE['ytick.labelsize'])
+            axes[idx].set_ylabel(f'{comp}', fontsize=PLOT_STYLE['axes.labelsize'])
+            # Remove grid
+            # axes[idx].grid(True, linestyle='--', alpha=0.3, zorder=1)
+            axes[idx].tick_params(axis='x', labelsize=PLOT_STYLE['xtick.labelsize'])
+            axes[idx].tick_params(axis='y', labelsize=PLOT_STYLE['ytick.labelsize'])
 
-        # Add legend to each subplot, positioned above the chart
-        axes[idx].legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=2, 
-                         columnspacing=1.5, handletextpad=0.5, fontsize=PLOT_STYLE['legend.fontsize'])
+            # Add legend to each subplot, positioned above the chart
+            axes[idx].legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=2, 
+                             columnspacing=1.5, handletextpad=0.5, fontsize=PLOT_STYLE['legend.fontsize'])
+        else:
+            # If compartment only exists in one dataset, just note it in the axis
+            axes[idx].text(0.5, 0.5, f'Compartment {comp} data incomplete', 
+                          horizontalalignment='center', verticalalignment='center', 
+                          transform=axes[idx].transAxes, fontsize=14)
+            axes[idx].set_ylabel(f'{comp}', fontsize=PLOT_STYLE['axes.labelsize'])
 
     # Set x-label for the bottom subplot
     axes[-1].set_xlabel('Time', fontsize=PLOT_STYLE['axes.labelsize'])

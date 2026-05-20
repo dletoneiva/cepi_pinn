@@ -182,19 +182,49 @@ class PINNTrainer:
                 else:
                     logger.info("Using existing MLflow run")
                 
-                # Log model and training parameters
+                # Log detailed model and training parameters
                 try:
+                    # Physics model information
                     mlflow.log_params({
                         "model_type": type(self.physics_model).__name__,
                         "compartment_names": str(self.physics_model.compartment_names),
+                        "ground_truth_parameters": str(self.physics_model.parameters),
+                        "initial_conditions": str(self.config.get('initial_conditions', [])),
+                    })
+                    
+                    # Network architecture details
+                    network_config = self.config.get('network', {})
+                    mlflow.log_params({
+                        "network_layers": len(network_config.get('hidden_dims', [])),
+                        "layer_size": str(network_config.get('hidden_dims', [])),
+                        "dropout": network_config.get('dropout', 0.0),
+                        "encoder_type": type(self.model.encoder).__name__ if self.model.encoder else "None",
+                        "head_type": type(self.model.head).__name__ if self.model.head else "None",
+                    })
+                    
+                    # Observables configuration
+                    observables_config = self.config.get('observables', {})
+                    mlflow.log_params({
+                        "observable_type": observables_config.get('type', 'synthetic'),
+                        "t_max": observables_config.get('t_max', 'N/A'),
+                        "n_points": observables_config.get('n_points', 'N/A'),
+                        "noise": observables_config.get('noise', 0.0),
+                        "t_span": str(observables_config.get('t_span', 'N/A')),
+                        "t_eval": str(observables_config.get('t_eval', 'N/A')),
+                        "observed_variables": str(observables_config.get('observed_variables', [])),
+                    })
+                    
+                    # Training parameters
+                    mlflow.log_params({
                         "adam_lr": self.config.get('adam_lr', 1e-3),
                         "adam_epochs": self.config.get('adam_epochs', 5000),
+                        "lbfgs_max_iter": self.config.get('lbfgs_max_iter', 100),
                         "n_collocation_points": self.config.get('n_collocation_points', 100),
                         "data_weight": self.config.get('data_weight', 1.0),
                         "physics_weight": self.config.get('physics_weight', 1.0),
                         "learnable_parameters": str(self.config.get('learnable_parameters', []))
                     })
-                    logger.info("Logged training parameters to MLflow")
+                    logger.info("Logged detailed training parameters to MLflow")
                 except Exception as e:
                     logger.warning(f"Failed to log parameters to MLflow: {e}")
             except Exception as e:
@@ -231,7 +261,7 @@ class PINNTrainer:
             # Training parameters
             adam_epochs = self.config.get('adam_epochs', 5000)
             n_collocation_points = self.config.get('n_collocation_points', 100)
-            log_interval = self.config.get('log_interval', 100)
+            log_interval = 50  # Fixed log interval for MLflow
             
             # Sample collocation points
             t_min, t_max = t_array.min(), t_array.max()

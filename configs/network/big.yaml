@@ -3,7 +3,7 @@ network:
     type: 'mlp'
     num_layers: 6
     layer_size: 128
-    activation: "tanh"
+    activation: "Tanh"
     dropout: 0.0
   encoder: 'time_normalization'
   head: 'hardIC'

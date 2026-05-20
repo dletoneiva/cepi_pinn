@@ -123,17 +123,30 @@ def plot_actual_vs_predicted(
     if plot_config and "compartments_to_plot" in plot_config:
         compartments_to_plot = plot_config["compartments_to_plot"]
     else:
-        # Get common keys between actual and predicted data
+        # Get all common keys between actual and predicted data
         actual_keys = set(actual_data.keys())
         predicted_keys = set(predicted_data.keys())
+        # If no compartments specified in plot_config, plot all common ones
         compartments_to_plot = sorted(list(actual_keys.intersection(predicted_keys)))
     
+    # If still no compartments to plot after defaults, try using the union
+    if not compartments_to_plot:
+        all_keys = actual_keys.union(predicted_keys)
+        compartments_to_plot = sorted(list(all_keys))
+    
     # Validation: check if specified compartments exist in both datasets
+    filtered_compartments = []
     for comp in compartments_to_plot:
-        if comp not in actual_data:
-            raise ValueError(f"Compartment '{comp}' specified in plot_config but not found in actual_data")
-        if comp not in predicted_data:
-            raise ValueError(f"Compartment '{comp}' specified in plot_config but not found in predicted_data")
+        if comp in actual_data and comp in predicted_data:
+            filtered_compartments.append(comp)
+        elif comp in actual_data or comp in predicted_data:
+            # Include compartment if it exists in either dataset and warn about missing parts
+            if comp not in actual_data:
+                print(f"Warning: '{comp}' found in predicted data but not in actual data")
+            elif comp not in predicted_data:
+                print(f"Warning: '{comp}' found in actual data but not in predicted data")
+    
+    compartments_to_plot = filtered_compartments
     
     if not compartments_to_plot:
         raise ValueError("No compartments found to plot - check that actual and predicted data have common keys")
@@ -169,12 +182,12 @@ def plot_actual_vs_predicted(
     # Set x-label for the bottom subplot
     axes[-1].set_xlabel('Time', fontsize=PLOT_STYLE['axes.labelsize'])
 
-    fig.suptitle('Actual vs Predicted Compartments/Parameters Comparison', fontsize=PLOT_STYLE['figure.titlesize'])
+    fig.suptitle('Actual vs Predicted Network Prediction Comparison', fontsize=PLOT_STYLE['figure.titlesize'])
     plt.tight_layout()
 
     if save_path:
         fig.savefig(save_path, dpi=300)
-        print(f"Saved comparison plot → {save_path}")
+        print(f"Saved network prediction plot → {save_path}")
 
     if show:
         plt.show()

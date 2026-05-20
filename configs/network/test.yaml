@@ -1,5 +1,6 @@
 network:
-  backbone: 'mlp'
+  backbone:
+    type: 'mlp'
     num_layers: 2
     layer_size: 16
     activation: "tanh"

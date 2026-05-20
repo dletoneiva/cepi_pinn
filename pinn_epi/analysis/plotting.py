@@ -99,7 +99,8 @@ def plot_actual_vs_predicted(
     plot_config: Optional[dict] = None,
     model_compartments: Optional[list] = None,
     training_config: Optional[dict] = None,
-    observed_variables: Optional[list] = None
+    observed_variables: Optional[list] = None,
+    network_config: Optional[dict] = None
 ) -> tuple[plt.Figure, plt.Axes]:
     """
     Create a stacked plot comparing actual vs predicted compartments/parameters.
@@ -115,6 +116,7 @@ def plot_actual_vs_predicted(
         model_compartments: Ordered list of compartment names from the model
         training_config: Training configuration for summary text
         observed_variables: List of observed variables from the observables config
+        network_config: Network configuration for architecture information
 
     Returns:
         Figure and axes objects
@@ -179,12 +181,12 @@ def plot_actual_vs_predicted(
     if not compartments_to_plot:
         raise ValueError("No compartments found to plot - check that actual and predicted data have common keys")
 
-    # Create subplots - one for each compartment to plot
+    # Create subplots - one for each compartment to plot + one for sum of compartments
     n_comps = len(compartments_to_plot)
-    fig, axes = plt.subplots(n_comps, 1, figsize=(12, 4 * n_comps), dpi=300)
+    fig, axes = plt.subplots(n_comps + 1, 1, figsize=(12, 4 * (n_comps + 1)), dpi=300)
 
     # Handle case where there's only one subplot
-    if n_comps == 1:
+    if n_comps + 1 == 1:
         axes = [axes]
 
     # Plot each compartment
@@ -202,8 +204,6 @@ def plot_actual_vs_predicted(
             axes[idx].plot(t_data, predicted_values, label=f'Predicted {comp}', color=color, lw=3, linestyle='--', zorder=3)
 
             axes[idx].set_ylabel(f'{comp}', fontsize=PLOT_STYLE['axes.labelsize'])
-            # Remove grid
-            # axes[idx].grid(True, linestyle='--', alpha=0.3, zorder=1)
             axes[idx].tick_params(axis='x', labelsize=PLOT_STYLE['xtick.labelsize'])
             axes[idx].tick_params(axis='y', labelsize=PLOT_STYLE['ytick.labelsize'])
 
@@ -217,53 +217,78 @@ def plot_actual_vs_predicted(
                           transform=axes[idx].transAxes, fontsize=14)
             axes[idx].set_ylabel(f'{comp}', fontsize=PLOT_STYLE['axes.labelsize'])
 
+    # Plot sum of all compartments
+    sum_actual = np.zeros_like(t_data)
+    sum_predicted = np.zeros_like(t_data)
+    
+    for comp in compartments_to_plot:
+        if comp in actual_data:
+            sum_actual += actual_data[comp]
+        if comp in predicted_data:
+            sum_predicted += predicted_data[comp]
+    
+    # Universal color for sum plot
+    sum_color = 'black'
+    axes[n_comps].plot(t_data, sum_actual, label='Ground Truth Sum', color=sum_color, lw=2, linestyle='-', zorder=2)
+    axes[n_comps].plot(t_data, sum_predicted, label='Predicted Sum', color=sum_color, lw=3, linestyle='--', zorder=3)
+    axes[n_comps].set_ylabel('Sum of Compartments', fontsize=PLOT_STYLE['axes.labelsize'])
+    axes[n_comps].tick_params(axis='x', labelsize=PLOT_STYLE['xtick.labelsize'])
+    axes[n_comps].tick_params(axis='y', labelsize=PLOT_STYLE['ytick.labelsize'])
+    axes[n_comps].legend(loc='center', bbox_to_anchor=(0.5, 1.1), ncol=2, 
+                         columnspacing=1.5, handletextpad=0.5, fontsize=PLOT_STYLE['legend.fontsize'])
+
     # Set x-label for the bottom subplot
     axes[-1].set_xlabel('Time', fontsize=PLOT_STYLE['axes.labelsize'])
 
     fig.suptitle('Actual vs Predicted Network Prediction Comparison', fontsize=PLOT_STYLE['figure.titlesize'])
 
-    # Add training configuration summary at the bottom with same aesthetics as ode solution
-    if training_config or observed_variables:
-        # Build summary text with all important parameters
-        summary_items = []
+    # Add training configuration summary and network architecture at the bottom
+    summary_items = []
+    
+    if training_config:
+        # Extract relevant parameters for summary
+        data_weight = training_config.get('data_weight', 1.0)
+        physics_weight = training_config.get('physics_weight', 1.0)
+        adam_epochs = training_config.get('adam_epochs', 1000)
+        adam_lr = training_config.get('adam_lr', 0.001)
+        lbfgs_max_iter = training_config.get('lbfgs_max_iter', 50)
+        n_collocation_points = training_config.get('n_collocation_points', 100)
         
-        if training_config:
-            # Extract relevant parameters for summary
-            data_weight = training_config.get('data_weight', 1.0)
-            physics_weight = training_config.get('physics_weight', 1.0)
-            adam_epochs = training_config.get('adam_epochs', 1000)
-            adam_lr = training_config.get('adam_lr', 0.001)
-            lbfgs_max_iter = training_config.get('lbfgs_max_iter', 50)
-            n_collocation_points = training_config.get('n_collocation_points', 100)
-            
-            # Format learnable parameters
-            learnable_params = training_config.get('learnable_parameters', [])
-            params_str = ', '.join(learnable_params) if learnable_params else 'None'
-            
-            training_info = f"Loss: Data={data_weight}, Physics={physics_weight} | " \
-                           f"Adam: {adam_epochs}ep, lr={adam_lr} | " \
-                           f"LBFGS: {lbfgs_max_iter}iter | " \
-                           f"Collocation: {n_collocation_points}pts | " \
-                           f"Learned: {params_str}"
-            summary_items.append(training_info)
+        # Format learnable parameters
+        learnable_params = training_config.get('learnable_parameters', [])
+        params_str = ', '.join(learnable_params) if learnable_params else 'None'
         
-        if observed_variables:
-            obs_str = ','.join(observed_variables)
-            observed_info = f"Observed: [{obs_str}]"
-            summary_items.append(observed_info)
+        training_info = f"Loss: Data={data_weight}, Physics={physics_weight} | " \
+                       f"Adam: {adam_epochs}ep, lr={adam_lr} | " \
+                       f"LBFGS: {lbfgs_max_iter}iter | " \
+                       f"Collocation: {n_collocation_points}pts | " \
+                       f"Learned: {params_str}"
+        summary_items.append(training_info)
+    
+    if observed_variables:
+        obs_str = ','.join(observed_variables)
+        observed_info = f"Observed: [{obs_str}]"
+        summary_items.append(observed_info)
         
+    if network_config:
+        # Add network architecture information
+        backbone_info = f"Backbone: {network_config.get('backbone', {}).get('type', 'BaseMLP')}"
+        encoder_info = f"Encoder: {network_config.get('encoder', 'None')}"
+        head_info = f"Head: {network_config.get('head', 'None')}"
+        architecture_info = f"Architecture: {backbone_info}, {encoder_info}, {head_info}"
+        summary_items.append(architecture_info)
+    
+    if summary_items:
         summary_text = " | ".join(summary_items)
-
         # Wrap text to fit the figure
         wrapped_summary = textwrap.fill(summary_text, width=80)
-
-        # Add the summary text below the subplots with same aesthetics as ode solution
-        fig.text(0.5, 0.02, wrapped_summary, ha='center', va='top', fontsize=10,
+        # Add the summary text closer to the figure
+        fig.text(0.5, 0.01, wrapped_summary, ha='center', va='bottom', fontsize=10,
                  bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
                  transform=fig.transFigure)
 
     # Adjust subplot spacing to accommodate legends and summary text
-    plt.subplots_adjust(left=0.15, right=0.9, top=0.9, bottom=0.15, hspace=0.5)
+    plt.subplots_adjust(left=0.15, right=0.9, top=0.9, bottom=0.1, hspace=0.5)
 
     if save_path:
         fig.savefig(save_path, dpi=300, bbox_inches='tight')

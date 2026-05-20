@@ -270,7 +270,8 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
                 plot_config=config_dict.get("plotting", {}),
                 model_compartments=model.compartment_names,
                 training_config=training_config,
-                observed_variables=observed_variables
+                observed_variables=observed_variables,
+                network_config=network_config  # Pass network config for architecture info
             )
             
             result["network_prediction_figure"] = network_prediction_fig

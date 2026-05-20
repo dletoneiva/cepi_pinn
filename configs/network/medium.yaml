@@ -1,5 +1,5 @@
 network:
-  num_layers: 6
-  layer_size: 64
+  num_layers: 4
+  layer_size: 128
   activation: "tanh"
   dropout: 0.0

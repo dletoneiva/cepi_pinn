@@ -190,8 +190,12 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     if solve_ode and training_config.get("run_training", False):
         logger.info("Starting PINN training with generated simulation data")
         
+        # Get observed variables from observables config
+        observables_config = config_dict.get("observables", {})
+        observed_variables = observables_config.get("observed_variables", [])
+        
         # Create DataWrangler to handle observables
-        data_wrangler = DataWrangler(model, config_dict.get("observables", {}))
+        data_wrangler = DataWrangler(model, observables_config)
         data_wrangler.load_full_dataset(
             trajectories=trajectories,
             model_params=params,
@@ -261,7 +265,8 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
                 save_path=network_prediction_save_path,
                 plot_config=config_dict.get("plotting", {}),
                 model_compartments=model.compartment_names,
-                training_config=training_config
+                training_config=training_config,
+                observed_variables=observed_variables
             )
             
             result["network_prediction_figure"] = network_prediction_fig

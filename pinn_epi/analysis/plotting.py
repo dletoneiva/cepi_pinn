@@ -98,7 +98,8 @@ def plot_actual_vs_predicted(
     save_path: Optional[str] = None,
     plot_config: Optional[dict] = None,
     model_compartments: Optional[list] = None,
-    training_config: Optional[dict] = None
+    training_config: Optional[dict] = None,
+    observed_variables: Optional[list] = None
 ) -> tuple[plt.Figure, plt.Axes]:
     """
     Create a stacked plot comparing actual vs predicted compartments/parameters.
@@ -113,6 +114,7 @@ def plot_actual_vs_predicted(
         plot_config: Configuration specifying what to plot
         model_compartments: Ordered list of compartment names from the model
         training_config: Training configuration for summary text
+        observed_variables: List of observed variables from the observables config
 
     Returns:
         Figure and axes objects
@@ -220,34 +222,45 @@ def plot_actual_vs_predicted(
 
     fig.suptitle('Actual vs Predicted Network Prediction Comparison', fontsize=PLOT_STYLE['figure.titlesize'])
 
-    # Add training configuration summary at the bottom
-    if training_config:
-        # Extract relevant parameters for summary
-        data_weight = training_config.get('data_weight', 1.0)
-        physics_weight = training_config.get('physics_weight', 1.0)
-        adam_epochs = training_config.get('adam_epochs', 1000)
-        adam_lr = training_config.get('adam_lr', 0.001)
-        lbfgs_max_iter = training_config.get('lbfgs_max_iter', 50)
-        n_collocation_points = training_config.get('n_collocation_points', 100)
+    # Add training configuration summary at the bottom with same aesthetics as ode solution
+    if training_config or observed_variables:
+        # Build summary text with all important parameters
+        summary_items = []
         
-        # Format learnable parameters
-        learnable_params = training_config.get('learnable_parameters', [])
-        params_str = ', '.join(learnable_params) if learnable_params else 'None'
-
-        # Build summary text
-        summary_text = f"Loss weights: Data={data_weight}, Physics={physics_weight} | " \
-                       f"Adam: epochs={adam_epochs}, lr={adam_lr} | " \
-                       f"LBFGS: max_iter={lbfgs_max_iter} | " \
-                       f"Collocation points: {n_collocation_points} | " \
-                       f"Learned params: {params_str}"
+        if training_config:
+            # Extract relevant parameters for summary
+            data_weight = training_config.get('data_weight', 1.0)
+            physics_weight = training_config.get('physics_weight', 1.0)
+            adam_epochs = training_config.get('adam_epochs', 1000)
+            adam_lr = training_config.get('adam_lr', 0.001)
+            lbfgs_max_iter = training_config.get('lbfgs_max_iter', 50)
+            n_collocation_points = training_config.get('n_collocation_points', 100)
+            
+            # Format learnable parameters
+            learnable_params = training_config.get('learnable_parameters', [])
+            params_str = ', '.join(learnable_params) if learnable_params else 'None'
+            
+            training_info = f"Loss: Data={data_weight}, Physics={physics_weight} | " \
+                           f"Adam: {adam_epochs}ep, lr={adam_lr} | " \
+                           f"LBFGS: {lbfgs_max_iter}iter | " \
+                           f"Collocation: {n_collocation_points}pts | " \
+                           f"Learned: {params_str}"
+            summary_items.append(training_info)
+        
+        if observed_variables:
+            obs_str = ','.join(observed_variables)
+            observed_info = f"Observed: [{obs_str}]"
+            summary_items.append(observed_info)
+        
+        summary_text = " | ".join(summary_items)
 
         # Wrap text to fit the figure
         wrapped_summary = textwrap.fill(summary_text, width=80)
 
-        # Add the summary text below the subplots
-        fig.text(0.5, 0.02, wrapped_summary, ha='center', va='bottom', 
-                 fontsize=10, wrap=True,
-                 bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', edgecolor='gray', alpha=0.8))
+        # Add the summary text below the subplots with same aesthetics as ode solution
+        fig.text(0.5, 0.02, wrapped_summary, ha='center', va='top', fontsize=10,
+                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+                 transform=fig.transFigure)
 
     # Adjust subplot spacing to accommodate legends and summary text
     plt.subplots_adjust(left=0.15, right=0.9, top=0.9, bottom=0.15, hspace=0.5)

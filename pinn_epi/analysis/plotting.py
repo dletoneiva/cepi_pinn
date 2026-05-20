@@ -131,6 +131,8 @@ def plot_actual_vs_predicted(
     
     # If still no compartments to plot after defaults, try using the union
     if not compartments_to_plot:
+        actual_keys = set(actual_data.keys())
+        predicted_keys = set(predicted_data.keys())
         all_keys = actual_keys.union(predicted_keys)
         compartments_to_plot = sorted(list(all_keys))
     

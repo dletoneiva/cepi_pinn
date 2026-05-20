@@ -156,4 +156,11 @@ def create_pinn_model(network_config: dict, compartment_names: list, initial_con
     # Add device property to access the device
     pinn_model.device = device
     
+    # Log model creation details
+    logger.info(f"Created PINN model with architecture:")
+    logger.info(f"  - Backbone: {backbone_config}")
+    logger.info(f"  - Encoder: {network_config.get('encoder', 'None')}")
+    logger.info(f"  - Head: {network_config.get('head', 'None')}")
+    logger.info(f"  - Device: {device}")
+    
     return pinn_model

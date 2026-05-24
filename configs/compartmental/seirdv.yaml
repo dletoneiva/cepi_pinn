@@ -8,4 +8,3 @@ model:
     mu: 0.02    # death rate
     nu: 0.05    # vaccination rate
   initial_conditions: [0.91, 0.02, 0.05, 0.0, 0.0, 0.02]  # S(0), E(0), I(0), R(0), D(0), V(0)
-  output_size: 6

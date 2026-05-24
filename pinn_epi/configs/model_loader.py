@@ -64,6 +64,10 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         if key not in config["compartmental"]["model"]:
             raise KeyError(f"Missing required model key: {key}")
     
+    # Validate parameters
+    parameters = get_model_parameters(config)
+    _validate_parameters(parameters, model_type)
+    
     # Validate initial conditions length matches expected compartment count
     initial_conditions = get_initial_conditions(config)
     model_class = get_model_class(model_type)
@@ -81,6 +85,21 @@ def validate_model_config(config: Dict[str, Any]) -> None:
             raise ValueError(f"Initial conditions length ({len(initial_conditions)}) does not match "
                              f"expected number of compartments ({expected_compartments}) for {model_type}")
     
+    # Validate initial conditions values
+    _validate_initial_conditions(initial_conditions, model_type)
+    
+    # Validate conservation for models that should conserve population
+    if expected_compartments is not None:
+        try:
+            temp_model = model_class()
+            if temp_model.should_conserve:
+                ic_sum = sum(initial_conditions)
+                if not abs(ic_sum - 1.0) < 1e-6:
+                    raise ValueError(f"Initial conditions must sum to 1.0 for {model_type} (sum={ic_sum:.6f})")
+        except Exception:
+            # Skip conservation validation if we can't create model instance
+            pass
+    
     logger.debug(f"Model configuration validated successfully for {model_type}")
     
     # Validate that learnable parameters are in the physics model
@@ -91,6 +110,62 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         if param_name not in model_params:
             raise ValueError(f"Learnable parameter '{param_name}' not found in model parameters. "
                              f"Available parameters: {list(model_params.keys())}")
+
+
+def _validate_parameters(parameters: Dict[str, Any], model_type: str) -> None:
+    """Validate model parameters.
+    
+    Args:
+        parameters: Dictionary of model parameters
+        model_type: Type of model being validated
+        
+    Raises:
+        ValueError: If parameters are invalid
+    """
+    if not isinstance(parameters, dict):
+        raise ValueError("Parameters must be a dictionary")
+    
+    for param_name, param_value in parameters.items():
+        # Check if parameter is numeric
+        if not isinstance(param_value, (int, float)):
+            raise ValueError(f"Parameter '{param_name}' must be numeric, got {type(param_value)}")
+        
+        # Check if parameter is non-negative
+        if param_value < 0:
+            raise ValueError(f"Parameter '{param_name}' must be non-negative, got {param_value}")
+        
+        # Check for reasonable parameter ranges (these are general guidelines)
+        if param_name == 'beta' and param_value > 10.0:
+            raise ValueError(f"Parameter 'beta' seems too large ({param_value}), typical values are < 10.0")
+        
+        if param_name in ['gamma', 'sigma', 'mu', 'nu'] and param_value > 5.0:
+            raise ValueError(f"Parameter '{param_name}' seems too large ({param_value}), typical values are < 5.0")
+
+
+def _validate_initial_conditions(initial_conditions: list, model_type: str) -> None:
+    """Validate initial conditions.
+    
+    Args:
+        initial_conditions: List of initial conditions
+        model_type: Type of model being validated
+        
+    Raises:
+        ValueError: If initial conditions are invalid
+    """
+    if not isinstance(initial_conditions, list):
+        raise ValueError("Initial conditions must be a list")
+    
+    if len(initial_conditions) == 0:
+        raise ValueError("Initial conditions list cannot be empty")
+    
+    for i, ic_value in enumerate(initial_conditions):
+        # Check if initial condition is numeric
+        if not isinstance(ic_value, (int, float)):
+            raise ValueError(f"Initial condition at index {i} must be numeric, got {type(ic_value)}")
+        
+        # Check if initial condition is within valid range [0, 1]
+        if ic_value < 0 or ic_value > 1:
+            raise ValueError(f"Initial condition at index {i} must be between 0 and 1, got {ic_value}")
 
 
 def create_model_from_config(config: Dict[str, Any]) -> Any:

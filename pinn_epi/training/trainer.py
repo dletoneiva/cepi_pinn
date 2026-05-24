@@ -102,7 +102,7 @@ class PINNTrainer:
             if compartment in y_data_dict:
                 # Only compute loss for observed compartments
                 pred = y_pred_data[:, i]
-                true = y_data_dict[ compartment].to(self.device)  # Ensure tensor is on the correct device
+                true = y_data_dict[compartment].to(self.device)  # Ensure tensor is on the correct device
                 compartment_loss = torch.mean((pred - true) ** 2)
                 data_losses.append(compartment_loss)
         

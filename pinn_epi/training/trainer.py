@@ -53,7 +53,7 @@ class PINNTrainer:
                 # Replace the value in the physics model's parameters dictionary
                 self.physics_model.parameters[param_name] = p
                 logger.info(f"Parameter '{param_name}' is learnable with initial value {base_value}")
-            else:
+            else
                 # Parameter not found in model but marked as learnable - raise error
                 raise ValueError(f"Parameter '{param_name}' marked as learnable but not found in model parameters. "
                                  f"Available parameters: {list(self.physics_model.parameters.keys())}")
@@ -102,7 +102,7 @@ class PINNTrainer:
             if compartment in y_data_dict:
                 # Only compute loss for observed compartments
                 pred = y_pred_data[:, i]
-                true = y_data_dict[compartment].to(self.device)  # Ensure tensor is on the correct device
+                true = y_data_dict[ compartment].to(self.device)  # Ensure tensor is on the correct device
                 compartment_loss = torch.mean((pred - true) ** 2)
                 data_losses.append(compartment_loss)
         
@@ -132,6 +132,7 @@ class PINNTrainer:
         du_dt = torch.cat(du_dt, dim=1)
         
         # Get physics residuals - use the model's internal parameters dictionary
+        # The parameters dictionary has been updated to point to learnable parameters
         physics_residuals = self.physics_model.get_derivatives(t_phys, y_pred_phys, self.physics_model.parameters)
         physics_loss = torch.mean((du_dt - physics_residuals) ** 2)
 

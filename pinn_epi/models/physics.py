@@ -236,10 +236,6 @@ class SIRDModel(CompartmentalModel):
     def compartment_names(self) -> list[str]:
         return ['S', 'I', 'R', 'D']
 
-    @property
-    def should_conserve(self) -> bool:
-        return False  # Total population is not conserved due to deaths
-
     def get_derivatives(
         self, t: torch.Tensor, u: torch.Tensor, params: dict
     ) -> torch.Tensor:
@@ -268,10 +264,6 @@ class SIRDVModel(CompartmentalModel):
     @property
     def compartment_names(self) -> list[str]:
         return ['S', 'I', 'R', 'D', 'V']
-
-    @property
-    def should_conserve(self) -> bool:
-        return False  # Total population is not conserved due to deaths
 
     def get_derivatives(
         self, t: torch.Tensor, u: torch.Tensor, params: dict
@@ -303,10 +295,6 @@ class SEIRDModel(CompartmentalModel):
     @property
     def compartment_names(self) -> list[str]:
         return ['S', 'E', 'I', 'R', 'D']
-
-    @property
-    def should_conserve(self) -> bool:
-        return False  # Total population is not conserved due to deaths
 
     def get_derivatives(
         self, t: torch.Tensor, u: torch.Tensor, params: dict
@@ -369,10 +357,6 @@ class SEIRDVModel(CompartmentalModel):
     @property
     def compartment_names(self) -> list[str]:
         return ['S', 'E', 'I', 'R', 'D', 'V']
-
-    @property
-    def should_conserve(self) -> bool:
-        return False  # Total population is not conserved due to deaths
 
     def get_derivatives(
         self, t: torch.Tensor, u: torch.Tensor, params: dict

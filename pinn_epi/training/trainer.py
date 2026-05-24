@@ -45,7 +45,7 @@ class PINNTrainer:
         for param_name in learnable_param_names:
             if param_name in self.physics_model.parameters:
                 # Extract the initial value from the model's parameters
-                base_value = self.physics_model.parameters[param_name]
+                base_value = 0 #self.physics_model.parameters[param_name]
                 # Create a learnable parameter
                 p = nn.Parameter(torch.tensor(base_value, dtype=torch.float32, device=self.device))
                 # Store in our learnable parameters

@@ -17,8 +17,7 @@ from pinn_epi.configs.model_loader import (
     get_network_config,
     get_training_config,
     get_simulation_config,
-    get_synthetic_plotting_config,
-    get_output_size
+    get_synthetic_plotting_config
 )
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.plotting import plot_compartmental_solution, plot_actual_vs_predicted
@@ -206,8 +205,8 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         # Get training tensors for observed variables only
         training_tensors = data_wrangler.get_training_tensors()
         
-        # Get output size for network head
-        output_size = get_output_size(config_dict)
+        # Infer output size from compartment count
+        output_size = len(model.compartment_names)
         
         # Create PINN model using the network configuration
         pinn_model = create_pinn_model(network_config, model.compartment_names, y0, t_span, output_size)

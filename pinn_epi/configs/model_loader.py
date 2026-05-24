@@ -59,7 +59,7 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         raise ValueError(f"Unknown model type: {model_type}. Available models: {list(COMPARTMENTAL_MODEL_REGISTRY.keys())}")
     
     # Check model section
-    model_keys = ["type", "parameters", "initial_conditions", "output_size"]
+    model_keys = ["type", "parameters", "initial_conditions"]
     for key in model_keys:
         if key not in config["compartmental"]["model"]:
             raise KeyError(f"Missing required model key: {key}")

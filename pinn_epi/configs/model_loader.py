@@ -64,6 +64,23 @@ def validate_model_config(config: Dict[str, Any]) -> None:
         if key not in config["compartmental"]["model"]:
             raise KeyError(f"Missing required model key: {key}")
     
+    # Validate initial conditions length matches expected compartment count
+    initial_conditions = get_initial_conditions(config)
+    model_class = get_model_class(model_type)
+    
+    # Create a temporary instance to get compartment names (without parameters since we only need the count)
+    try:
+        temp_model = model_class()
+        expected_compartments = len(temp_model.compartment_names)
+    except Exception:
+        # If we can't create a model without parameters, we'll skip this validation
+        expected_compartments = None
+    
+    if expected_compartments is not None:
+        if len(initial_conditions) != expected_compartments:
+            raise ValueError(f"Initial conditions length ({len(initial_conditions)}) does not match "
+                             f"expected number of compartments ({expected_compartments}) for {model_type}")
+    
     logger.debug(f"Model configuration validated successfully for {model_type}")
     
     # Validate that learnable parameters are in the physics model

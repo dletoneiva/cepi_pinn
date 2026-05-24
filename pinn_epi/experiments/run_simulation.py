@@ -19,7 +19,6 @@ from pinn_epi.configs.model_loader import (
     get_training_config,
     get_simulation_config,
     get_synthetic_plotting_config,
-    get_data_config,
     get_output_size
 )
 from pinn_epi.analysis.evaluator import solve_compartmental_model

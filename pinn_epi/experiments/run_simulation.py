@@ -8,7 +8,6 @@ import logging
 import os
 from datetime import datetime
 from typing import Dict, Any
-import pandas as pd
 
 from pinn_epi.configs.model_loader import (
     validate_model_config, 

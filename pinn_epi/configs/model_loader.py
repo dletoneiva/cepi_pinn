@@ -88,17 +88,11 @@ def validate_model_config(config: Dict[str, Any]) -> None:
     # Validate initial conditions values
     _validate_initial_conditions(initial_conditions, model_type)
     
-    # Validate conservation for models that should conserve population
+    # Validate conservation for all models (assuming all models conserve population)
     if expected_compartments is not None:
-        try:
-            temp_model = model_class()
-            if temp_model.should_conserve:
-                ic_sum = sum(initial_conditions)
-                if not abs(ic_sum - 1.0) < 1e-6:
-                    raise ValueError(f"Initial conditions must sum to 1.0 for {model_type} (sum={ic_sum:.6f})")
-        except Exception:
-            # Skip conservation validation if we can't create model instance
-            pass
+        ic_sum = sum(initial_conditions)
+        if not abs(ic_sum - 1.0) < 1e-6:
+            raise ValueError(f"Initial conditions must sum to 1.0 for {model_type} (sum={ic_sum:.6f})")
     
     logger.debug(f"Model configuration validated successfully for {model_type}")
     

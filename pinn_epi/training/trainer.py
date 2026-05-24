@@ -277,29 +277,35 @@ class PINNTrainer:
                 optimizer_adam.step()
 
                 if epoch % log_interval == 0:
-                    logger.info(f"Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}")
+                    # Create log message with loss values and parameter values
+                    log_message = f"Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}"
+                    
+                    # Add parameter values to log message
+                    if len(self.learnable_params) > 0:
+                        param_values = ", ".join([f"{name}: {param.item():.4f}" for name, param in self.learnable_params.items()])
+                        log_message += f", Parameters: {param_values}"
+                    
+                    logger.info(log_message)
+                    
                     # Log metrics with MLflow
                     if self.mlflow_enabled:
                         try:
                             if mlflow.active_run():
-                                mlflow.log_metrics({
+                                metrics_dict = {
                                     "total_loss": total_loss.item(),
                                     "data_loss": data_loss.item(),
                                     "physics_loss": physics_loss.item()
-                                }, step=epoch)
+                                }
+                                
+                                # Add parameter values to metrics dict
+                                if len(self.learnable_params) > 0:
+                                    param_dict = {name: param.item() for name, param in self.learnable_params.items()}
+                                    metrics_dict.update(param_dict)
+                                
+                                mlflow.log_metrics(metrics_dict, step=epoch)
                                 logger.debug(f"Logged metrics to MLflow at epoch {epoch}")
                         except Exception as e:
                             logger.warning(f"Failed to log metrics to MLflow at epoch {epoch}: {e}")
-                    
-                    # Log learnable parameters if MLflow is enabled
-                    if self.mlflow_enabled and len(self.learnable_params) > 0:
-                        try:
-                            if mlflow.active_run():
-                                param_dict = {name: param.item() for name, param in self.learnable_params.items()}
-                                mlflow.log_metrics(param_dict, step=epoch)
-                                logger.debug(f"Logged learnable parameters to MLflow at epoch {epoch}")
-                        except Exception as e:
-                            logger.warning(f"Failed to log learnable parameters to MLflow at epoch {epoch}: {e}")
 
             # L-BFGS phase
             def closure():

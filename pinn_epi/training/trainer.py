@@ -53,7 +53,7 @@ class PINNTrainer:
                 # Replace the value in the physics model's parameters dictionary
                 self.physics_model.parameters[param_name] = p
                 logger.info(f"Parameter '{param_name}' is learnable with initial value {base_value}")
-            else
+            else:
                 # Parameter not found in model but marked as learnable - raise error
                 raise ValueError(f"Parameter '{param_name}' marked as learnable but not found in model parameters. "
                                  f"Available parameters: {list(self.physics_model.parameters.keys())}")

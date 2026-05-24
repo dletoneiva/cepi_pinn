@@ -40,8 +40,8 @@ class PINNTrainer:
         # Initialize learnable parameters
         self.learnable_params = nn.ParameterDict()
         learnable_param_names = self.config.get("learnable_parameters", [])
-        
-        # Process learnable parameters - extract from model's parameters and replace with Parameters
+
+        # Validate and process learnable parameters
         for param_name in learnable_param_names:
             if param_name in self.physics_model.parameters:
                 # Extract the initial value from the model's parameters
@@ -54,12 +54,9 @@ class PINNTrainer:
                 self.physics_model.parameters[param_name] = p
                 logger.info(f"Parameter '{param_name}' is learnable with initial value {base_value}")
             else:
-                # Parameter not found in model but marked as learnable - initialize with a reasonable value
-                initial_value = 0.1  # Default small positive value for most physics parameters
-                p = nn.Parameter(torch.tensor(initial_value, dtype=torch.float32, device=self.device))
-                self.learnable_params[param_name] = p
-                self.physics_model.parameters[param_name] = p
-                logger.warning(f"Parameter '{param_name}' marked as learnable but not found in model parameters. Initialized to {initial_value}")
+                # Parameter not found in model but marked as learnable - raise error
+                raise ValueError(f"Parameter '{param_name}' marked as learnable but not found in model parameters. "
+                                 f"Available parameters: {list(self.physics_model.parameters.keys())}")
 
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """

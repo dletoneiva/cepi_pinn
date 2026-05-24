@@ -1,9 +1,8 @@
 """Load compartmental models from configuration."""
 
-from typing import Dict, Any, Union
+from typing import Dict, Any
 import importlib
 import logging
-from omegaconf import DictConfig, OmegaConf
 
 from pinn_epi.constants import COMPARTMENTAL_MODEL_REGISTRY
 

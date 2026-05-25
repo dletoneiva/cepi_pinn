@@ -10,6 +10,7 @@ import mlflow
 import mlflow.pytorch
 import hydra
 import os
+from pinn_epi.utils.device_utils import DEVICE  # Import the centralized device
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ class PINNTrainer:
         self.physics_model = physics_model
         self.data = data
         self.config = config
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = DEVICE  # Use the centralized device
         self.model.to(self.device)
         
         # Check MLflow configuration

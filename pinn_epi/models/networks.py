@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import logging
 from typing import List, Dict
+from pinn_epi.utils.device_utils import DEVICE  # Import the centralized device
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +143,7 @@ def create_pinn_model(network_config: dict, compartment_names: list, initial_con
     # Create initial condition head if specified
     head = None
     if network_config.get("head") == "hardIC":
-        initial_conditions_tensor = torch.tensor(initial_conditions, dtype=torch.float32)
+        initial_conditions_tensor = torch.tensor(initial_conditions, dtype=torch.float32, device=DEVICE)
         head = HardICHead(
             initial_conditions=initial_conditions_tensor,
             t0=float(t_span[0]),
@@ -157,17 +158,16 @@ def create_pinn_model(network_config: dict, compartment_names: list, initial_con
     )
     
     # Set the device for the model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    pinn_model.to(device)
+    pinn_model.to(DEVICE)
     
     # Add device property to access the device
-    pinn_model.device = device
+    pinn_model.device = DEVICE
     
     # Log model creation details
     logger.info(f"Created PINN model with architecture:")
     logger.info(f"  - Backbone: {backbone_config}")
     logger.info(f"  - Encoder: {network_config.get('encoder', 'None')}")
     logger.info(f"  - Head: {network_config.get('head', 'None')}")
-    logger.info(f"  - Device: {device}")
+    logger.info(f"  - Device: {DEVICE}")
     
     return pinn_model

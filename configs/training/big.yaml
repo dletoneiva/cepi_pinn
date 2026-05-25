@@ -16,6 +16,10 @@ physics_weight: 1.0
 # Example: learnable_parameters: ["beta", "gamma"]
 learnable_parameters: []
 
+# Initial values for learnable parameters
+# Example: learnable_parameters_init: {"beta": 0.5, "gamma": 0.1}
+learnable_parameters_init: {}
+
 # MLflow settings
 mlflow:
   enabled: true

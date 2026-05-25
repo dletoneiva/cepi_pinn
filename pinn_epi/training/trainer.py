@@ -40,19 +40,27 @@ class PINNTrainer:
         # Initialize learnable parameters
         self.learnable_params = nn.ParameterDict()
         learnable_param_names = self.config.get("learnable_parameters", [])
+        learnable_param_init = self.config.get("learnable_parameters_init", {})
 
         # Validate and process learnable parameters
         for param_name in learnable_param_names:
             if param_name in self.physics_model.parameters:
-                # Extract the initial value from the model's parameters
-                base_value = self.physics_model.parameters[param_name]
+                # Get initial value from config or fallback to model's parameters
+                if param_name in learnable_param_init:
+                    initial_value = learnable_param_init[param_name]
+                    logger.info(f"Using configured initial value {initial_value} for parameter '{param_name}'")
+                else:
+                    # Extract the initial value from the model's parameters
+                    initial_value = self.physics_model.parameters[param_name]
+                    logger.info(f"Using model's initial value {initial_value} for parameter '{param_name}'")
+                
                 # Create a learnable parameter
-                p = nn.Parameter(torch.tensor(base_value, dtype=torch.float32, device=self.device))
+                p = nn.Parameter(torch.tensor(initial_value, dtype=torch.float32, device=self.device))
                 # Store in our learnable parameters
                 self.learnable_params[param_name] = p
                 # Replace the value in the physics model's parameters dictionary
                 self.physics_model.parameters[param_name] = p
-                logger.info(f"Parameter '{param_name}' is learnable with initial value {base_value}")
+                logger.info(f"Parameter '{param_name}' is learnable with initial value {initial_value}")
             else:
                 # Parameter not found in model but marked as learnable - raise error
                 raise ValueError(f"Parameter '{param_name}' marked as learnable but not found in model parameters. "
@@ -220,7 +228,8 @@ class PINNTrainer:
                         "n_collocation_points": self.config.get('n_collocation_points', 100),
                         "data_weight": self.config.get('data_weight', 1.0),
                         "physics_weight": self.config.get('physics_weight', 1.0),
-                        "learnable_parameters": str(self.config.get('learnable_parameters', []))
+                        "learnable_parameters": str(self.config.get('learnable_parameters', [])),
+                        "learnable_parameters_init": str(self.config.get('learnable_parameters_init', {}))
                     })
                     logger.info("Logged detailed training parameters to MLflow")
                 except Exception as e:

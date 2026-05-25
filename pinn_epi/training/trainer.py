@@ -2,7 +2,6 @@
 
 import torch
 import torch.nn as nn
-import numpy as np
 import logging
 from typing import Tuple
 from pinn_epi.models.networks import ModularPINN

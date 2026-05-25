@@ -1,0 +1,13 @@
+
+## Configuration
+
+All experiments are configured through YAML files in the `configs/` directory. The base configuration can be found at `configs/base.yaml`, with model-specific configurations in `configs/compartmental/`.
+
+## Running Your First PINN Training
+
+To run a PINN training experiment:
+
+1. Configure your model in `configs/compartmental/`
+2. Set training parameters in `configs/training/`
+3. Run the experiment:
+

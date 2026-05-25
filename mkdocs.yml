@@ -1,0 +1,58 @@
+site_name: cepi_pinn Documentation
+site_url: https://example.com/
+repo_url: https://github.com/yourusername/cepi_pinn
+repo_name: cepi_pinn
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.tabs
+    - toc.integrate
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_toc_entry: true
+            heading_level: 2
+            members_order: source
+            docstring_style: google
+            docstring_options:
+              ignore_init_summary: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - API Reference:
+    - Physics Models: api/physics.md
+    - Trainer: api/trainer.md
+    - Networks: api/networks.md
+    - Model Loader: api/model_loader.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - admonition
+  - toc:
+      permalink: true

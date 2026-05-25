@@ -31,6 +31,15 @@ logger = logging.getLogger(__name__)
 def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     """Run a simulation based on the provided configuration.
     
+    This function orchestrates the complete simulation workflow:
+    1. Validates the configuration
+    2. Creates the compartmental model
+    3. Solves the ODE system (if requested)
+    4. Plots the results
+    5. Saves the data
+    6. Trains a PINN model (if requested)
+    7. Evaluates and plots PINN predictions
+    
     Args:
         config: Configuration dictionary from Hydra
         
@@ -284,6 +293,9 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
 @hydra.main(version_base=None, config_path="../../configs", config_name="base")
 def main(cfg: DictConfig) -> None:
     """Run simulation based on Hydra configuration.
+    
+    This is the main entry point for running simulations. It sets up logging,
+    random seeds, and delegates to run_simulation_from_config.
     
     Args:
         cfg: Hydra configuration object

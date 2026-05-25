@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 def get_model_class(model_type: str) -> type:
     """Dynamically import and return the model class.
     
+    This function uses the COMPARTMENTAL_MODEL_REGISTRY to map model type strings
+    to their corresponding class implementations. It enables dynamic loading
+    of models without hardcoding import statements.
+    
     Args:
         model_type: String name of the model class
         
@@ -32,6 +36,13 @@ def get_model_class(model_type: str) -> type:
 
 def validate_model_config(config: Dict[str, Any]) -> None:
     """Validate the model configuration.
+    
+    Performs comprehensive validation of the configuration including:
+    - Required sections and keys
+    - Parameter validity (non-negative, reasonable ranges)
+    - Initial conditions (correct count, valid values)
+    - Conservation laws (population sum = 1.0)
+    - Learnable parameter consistency
     
     Args:
         config: Configuration dictionary containing model information
@@ -109,6 +120,9 @@ def validate_model_config(config: Dict[str, Any]) -> None:
 def _validate_parameters(parameters: Dict[str, Any], model_type: str) -> None:
     """Validate model parameters.
     
+    Ensures parameters are numeric, non-negative, and within reasonable ranges
+    for epidemiological modeling.
+    
     Args:
         parameters: Dictionary of model parameters
         model_type: Type of model being validated
@@ -139,6 +153,8 @@ def _validate_parameters(parameters: Dict[str, Any], model_type: str) -> None:
 def _validate_initial_conditions(initial_conditions: list, model_type: str) -> None:
     """Validate initial conditions.
     
+    Ensures initial conditions are numeric, within [0,1], and properly formatted.
+    
     Args:
         initial_conditions: List of initial conditions
         model_type: Type of model being validated
@@ -164,6 +180,10 @@ def _validate_initial_conditions(initial_conditions: list, model_type: str) -> N
 
 def create_model_from_config(config: Dict[str, Any]) -> Any:
     """Create a compartmental model instance from configuration.
+    
+    Instantiates a compartmental model with parameters specified in the configuration.
+    This function serves as the main entry point for creating model instances
+    from configuration files.
     
     Args:
         config: Configuration dictionary

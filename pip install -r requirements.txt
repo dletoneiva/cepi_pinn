@@ -1,0 +1,5 @@
+
+## Basic Usage
+
+cepi_pinn uses Hydra for configuration management. To run a basic SIR model simulation:
+

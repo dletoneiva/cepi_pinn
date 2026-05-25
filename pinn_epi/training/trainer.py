@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 import logging
-from typing import Tuple
+from typing import Tuple, Dict, Any
 from pinn_epi.models.networks import ModularPINN
 from pinn_epi.models.physics import CompartmentalModel
 import mlflow
@@ -16,15 +16,38 @@ from pinn_epi.utils.device_utils import DEVICE  # Import the centralized device
 logger = logging.getLogger(__name__)
 
 class PINNTrainer:
-    def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict):
-        """
-        Initialize the PINNTrainer.
+    """Trainer for Physics-Informed Neural Networks (PINNs) in epidemiological modeling.
+    
+    This class orchestrates the training of PINNs by combining empirical data loss
+    with physics-based loss terms derived from compartmental models. The training
+    process involves two phases:
+    
+    1. Adam optimization for a large number of epochs to find a good starting point
+    2. L-BFGS optimization for fine-tuning the solution
+    
+    The physics loss is computed by ensuring that the neural network's derivatives
+    match the right-hand side of the ODE system defined by the compartmental model.
+    This approach allows the PINN to learn the underlying dynamics without requiring
+    extensive training data.
+    
+    Attributes:
+        model: The neural network model to be trained
+        physics_model: The compartmental model defining the physics constraints
+        data: Dictionary containing empirical training data
+        config: Configuration parameters for training
+        device: Computing device (CPU/GPU) for training
+        learnable_params: Dictionary of parameters that are being optimized
+        mlflow_enabled: Flag indicating if MLflow logging is active
+    """
 
+    def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict):
+        """Initialize the PINN trainer with model, physics constraints, and training data.
+        
         Args:
-            model: The PINN model to train.
-            physics_model: The physics model used for calculating residuals.
-            data: A dictionary containing the empirical data with compartment names as keys.
-            config: Configuration dictionary for training parameters.
+            model: The PINN model to train
+            physics_model: The physics model used for calculating residuals
+            data: A dictionary containing the empirical data with compartment names as keys
+            config: Configuration dictionary for training parameters
         """
         self.model = model
         self.physics_model = physics_model
@@ -59,15 +82,19 @@ class PINNTrainer:
                                  f"Available parameters: {list(self.physics_model.parameters.keys())}")
 
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
-        """
-        Sample collocation points for physics loss evaluation.
-
+        """Sample collocation points for physics loss evaluation.
+        
+        Collocation points are randomly sampled time points within the specified
+        range where the physics loss (residual of the ODE system) is evaluated.
+        These points are crucial for ensuring the PINN satisfies the differential
+        equations across the entire time domain.
+        
         Args:
-            t_range: Tuple (t_min, t_max) specifying the time range.
-            n_points: Number of collocation points to sample.
-
+            t_range: Tuple (t_min, t_max) specifying the time range
+            n_points: Number of collocation points to sample
+            
         Returns:
-            torch.Tensor: Collocation points with shape (n_points, 1).
+            torch.Tensor: Collocation points with shape (n_points, 1)
         """
         t_min, t_max = t_range
         # Sample random points in the interval and reshape to (n_points, 1)
@@ -75,14 +102,22 @@ class PINNTrainer:
         return points.view(-1, 1)
 
     def compute_loss(self, t_data: torch.Tensor, y_data_dict: dict, collocation_points: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Compute the total loss for the PINN model.
-
+        """Compute the total loss for the PINN model.
+        
+        The total loss is a weighted combination of data loss and physics loss:
+        
+        - Data loss: Mean squared error between model predictions and observed data
+        - Physics loss: Mean squared error of the residual of the ODE system
+          (difference between neural network derivatives and model derivatives)
+          
+        This combined loss ensures the model both fits the data and respects the
+        underlying physics.
+        
         Args:
-            t_data: Time points for the empirical data with shape (N, 1).
-            y_data_dict: Dictionary mapping compartment names to ground truth data.
-            collocation_points: Collocation points for physics loss with shape (M, 1).
-
+            t_data: Time points for the empirical data with shape (N, 1)
+            y_data_dict: Dictionary mapping compartment names to ground truth data
+            collocation_points: Collocation points for physics loss with shape (M, 1)
+            
         Returns:
             Tuple of (total_loss, data_loss, physics_loss)
         """
@@ -142,7 +177,14 @@ class PINNTrainer:
         return total_loss, data_loss, physics_loss
 
     def save_model_for_inference(self):
-        """Save the trained model for later inference."""
+        """Save the trained model for later inference.
+        
+        Saves both the model state dictionary and the full model object to enable
+        easy loading for inference. The files are saved in the Hydra output directory.
+        
+        Returns:
+            str: Path to the saved model file, or None if saving failed
+        """
         try:
             # Get Hydra output directory
             hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
@@ -163,8 +205,17 @@ class PINNTrainer:
             return None
 
     def train(self):
-        """
-        Train the PINN model using Adam and L-BFGS optimizers.
+        """Train the PINN model using Adam and L-BFGS optimizers.
+        
+        The training process consists of two phases:
+        
+        1. Adam optimization: Performs a large number of iterations with adaptive
+           learning rates to find a good approximate solution
+        2. L-BFGS optimization: Fine-tunes the solution with a quasi-Newton method
+           for higher accuracy
+           
+        Throughout training, metrics are logged to MLflow if enabled, including
+        loss values and parameter estimates.
         """
         # MLflow setup
         should_end_run = False

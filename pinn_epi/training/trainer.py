@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import logging
-from typing import Dict, Any, Tuple, Optional
+from typing import Tuple
 from pinn_epi.models.networks import ModularPINN
 from pinn_epi.models.physics import CompartmentalModel
 import mlflow

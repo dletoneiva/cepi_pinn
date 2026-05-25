@@ -15,6 +15,12 @@ simulation:
   t_span: [0, 30]
   num_points: 300
 
+save:
+  figures: true
+  models: true
+  predictions: true
+  directory: "results/${experiment.name}"
+
 loss_topology:
   enabled: true
   param_sweeps:

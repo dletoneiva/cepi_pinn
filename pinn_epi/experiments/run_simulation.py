@@ -24,6 +24,7 @@ from pinn_epi.analysis.plotting import plot_compartmental_solution, plot_actual_
 from pinn_epi.analysis.data_wrangler import save_simulation_data, DataWrangler
 from pinn_epi.training.trainer import PINNTrainer
 from pinn_epi.models.networks import create_pinn_model
+from pinn_epi.analysis.loss_topology import analyze_model_loss_topology  # New import
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -278,8 +279,45 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
                 result["network_prediction_save_path"] = network_prediction_save_path
                 logger.info(f"Network prediction plot saved to: {network_prediction_save_path}")
     
+    # Run loss topology analysis if enabled
+    if config.loss_topology.enabled and solve_ode:
+        logger.info("Running loss topology analysis")
+        run_loss_topology_analysis(
+            model=model,
+            reference_trajectories=trajectories,
+            t_eval=t_eval,
+            initial_conditions=y0,
+            config=config
+        )
+    
     logger.info("Simulation run completed successfully")
     return result
+
+def run_loss_topology_analysis(
+    model: CompartmentalModel,
+    reference_trajectories: Dict[str, np.ndarray],
+    t_eval: np.ndarray,
+    initial_conditions: list,
+    config: DictConfig
+) -> None:
+    """Run loss topology analysis for the trained model."""
+    
+    # Configuration for parameter sweeps
+    param_sweep_config = {
+        param: np.linspace(*config.loss_topology.param_sweeps[param])
+        for param in config.loss_topology.param_sweeps
+    }
+    
+    # Run analysis
+    analyze_model_loss_topology(
+        model=model,
+        reference_trajectories=reference_trajectories,
+        t_eval=t_eval,
+        initial_conditions=initial_conditions,
+        param_sweep_config=param_sweep_config,
+        save_dir=config.loss_topology.save_dir,
+        model_name=config.model.type
+    )
 
 @hydra.main(version_base=None, config_path="../../configs", config_name="base")
 def main(cfg: DictConfig) -> None:

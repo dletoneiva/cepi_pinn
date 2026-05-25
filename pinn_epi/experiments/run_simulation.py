@@ -25,6 +25,7 @@ from pinn_epi.analysis.data_wrangler import save_simulation_data, DataWrangler
 from pinn_epi.training.trainer import PINNTrainer
 from pinn_epi.models.networks import create_pinn_model
 from pinn_epi.analysis.loss_topology import analyze_model_loss_topology  # New import
+from pinn_epi.models.physics import CompartmentalModel  # Import CompartmentalModel
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -316,7 +317,7 @@ def run_loss_topology_analysis(
         initial_conditions=initial_conditions,
         param_sweep_config=param_sweep_config,
         save_dir=config.loss_topology.save_dir,
-        model_name=config.model.type
+        model_name=type(model).__name__  # Use model class name instead of config.model.type
     )
 
 @hydra.main(version_base=None, config_path="../../configs", config_name="base")

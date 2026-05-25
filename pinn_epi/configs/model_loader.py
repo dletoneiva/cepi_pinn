@@ -97,10 +97,10 @@ def validate_model_config(config: Dict[str, Any]) -> None:
     logger.debug(f"Model configuration validated successfully for {model_type}")
     
     # Validate that learnable parameters are in the physics model
-    learnable_param_names = config.get("training", {}).get("learnable_parameters", [])
+    learnable_param_dict = config.get("training", {}).get("learnable_parameters", {})
     model_params = config.get("compartmental", {}).get("model", {}).get("parameters", {})
     
-    for param_name in learnable_param_names:
+    for param_name in learnable_param_dict.keys():
         if param_name not in model_params:
             raise ValueError(f"Learnable parameter '{param_name}' not found in model parameters. "
                              f"Available parameters: {list(model_params.keys())}")

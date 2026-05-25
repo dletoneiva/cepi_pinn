@@ -1,25 +1,21 @@
 defaults:
-  - _self_
-  - model: sir
-  - data: synthetic
-  - training: medium
-  - network: medium
+  - compartmental: sir
+  - network: test
+  - training: test
   - observables: synthetic
+  - _self_
 
-experiment:
-  name: default_experiment
-  seed: 42
-  device: cuda
+numerical_ode_params:
+  t_span: [0, 50]
+  t_eval_points: 1000
+  solve_ode: true
 
-simulation:
-  t_span: [0, 30]
-  num_points: 300
-
-save:
-  figures: true
-  models: true
-  predictions: true
-  directory: "results/${experiment.name}"
+plotting:
+  show_compartmental_plot: true
+  save_compartmental_plot: true
+  show_network_prediction_plot: true
+  save_network_prediction_plot: true
+  compartments_to_plot: []
 
 loss_topology:
   enabled: true

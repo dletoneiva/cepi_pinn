@@ -1,0 +1,5 @@
+
+### SIR Model with PINN Training
+
+Create a config file `configs/sir_pinn.yaml`:
+

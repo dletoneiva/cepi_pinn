@@ -1,5 +1,9 @@
 
-## Basic Usage
+## Running Experiments
 
-cepi_pinn uses Hydra for configuration management. To run a basic SIR model simulation:
+Experiments are configured using YAML files. Here are some basic examples:
+
+### Basic SIR Model Simulation
+
+Create a config file `configs/sir_example.yaml`:
 

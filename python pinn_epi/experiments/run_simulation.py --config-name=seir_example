@@ -1,0 +1,11 @@
+
+## Output
+
+When you run experiments, outputs will be saved to the `outputs` directory with timestamped folders containing:
+- Plots (if enabled)
+- Simulation data
+- Trained models (if training was performed)
+
+## Next Steps
+
+Explore the `configs/` directory for more example configurations and refer to the documentation for advanced usage.

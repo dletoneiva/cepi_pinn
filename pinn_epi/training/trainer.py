@@ -326,8 +326,8 @@ class PINNTrainer:
             hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
             csv_file_path = os.path.join(hydra_output_dir, "training_metrics.csv")
             
-            # Initialize CSV file with headers
-            fieldnames = ['epoch', 'total_loss', 'data_loss', 'physics_loss']
+            # Initialize CSV file with headers including phase column
+            fieldnames = ['phase', 'epoch', 'total_loss', 'data_loss', 'physics_loss']
             if len(self.learnable_params) > 0:
                 fieldnames.extend(list(self.learnable_params.keys()))
             
@@ -344,7 +344,7 @@ class PINNTrainer:
 
                 if epoch % log_interval == 0:
                     # Create log message with loss values and parameter values
-                    log_message = f"Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}"
+                    log_message = f"[Adam] Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}"
                     
                     # Add parameter values to log message
                     if len(self.learnable_params) > 0:
@@ -358,6 +358,8 @@ class PINNTrainer:
                         try:
                             if mlflow.active_run():
                                 metrics_dict = {
+                                    "phase": "adam",
+                                    "epoch": epoch,
                                     "total_loss": total_loss.item(),
                                     "data_loss": data_loss.item(),
                                     "physics_loss": physics_loss.item()
@@ -376,6 +378,7 @@ class PINNTrainer:
                     # Log metrics to CSV
                     try:
                         row_data = {
+                            'phase': 'adam',
                             'epoch': epoch,
                             'total_loss': total_loss.item(),
                             'data_loss': data_loss.item(),
@@ -402,7 +405,7 @@ class PINNTrainer:
                 
                 # Log metrics for L-BFGS iterations
                 current_iter = lbfgs_iteration[0]
-                log_message = f"L-BFGS Iteration {current_iter}/{lbfgs_max_iter} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}"
+                log_message = f"[L-BFGS] Iteration {current_iter}/{lbfgs_max_iter} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}"
                 
                 # Add parameter values to log message
                 if len(self.learnable_params) > 0:
@@ -416,6 +419,8 @@ class PINNTrainer:
                     try:
                         if mlflow.active_run():
                             metrics_dict = {
+                                "phase": "lbfgs",
+                                "epoch": current_iter,
                                 "total_loss": total_loss.item(),
                                 "data_loss": data_loss.item(),
                                 "physics_loss": physics_loss.item()
@@ -434,7 +439,8 @@ class PINNTrainer:
                 # Log metrics to CSV
                 try:
                     row_data = {
-                        'epoch': adam_epochs + current_iter,
+                        'phase': 'lbfgs',
+                        'epoch': current_iter,
                         'total_loss': total_loss.item(),
                         'data_loss': data_loss.item(),
                         'physics_loss': physics_loss.item()

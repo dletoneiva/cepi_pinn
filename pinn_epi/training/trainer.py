@@ -310,6 +310,7 @@ class PINNTrainer:
 
             # Training parameters
             adam_epochs = self.config.get('adam_epochs', 5000)
+            lbfgs_max_iter = self.config.get('lbfgs_max_iter', 100)
             n_collocation_points = self.config.get('n_collocation_points', 100)
             log_interval = 50  # Fixed log interval for MLflow
             
@@ -391,11 +392,65 @@ class PINNTrainer:
                     except Exception as e:
                         logger.warning(f"Failed to log metrics to CSV at epoch {epoch}: {e}")
 
-            # L-BFGS phase
+            # L-BFGS phase with iteration tracking
+            lbfgs_iteration = [0]  # Use list to make it mutable in closure
+            
             def closure():
                 optimizer_lbfgs.zero_grad()
-                total_loss, _, _ = self.compute_loss(t_tensor, self.data, collocation_points)
+                total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, self.data, collocation_points)
                 total_loss.backward()
+                
+                # Log metrics for L-BFGS iterations
+                current_iter = lbfgs_iteration[0]
+                log_message = f"L-BFGS Iteration {current_iter}/{lbfgs_max_iter} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}"
+                
+                # Add parameter values to log message
+                if len(self.learnable_params) > 0:
+                    param_values = ", ".join([f"{name}: {param.item():.4f}" for name, param in self.learnable_params.items()])
+                    log_message += f", Parameters: {param_values}"
+                
+                logger.info(log_message)
+                
+                # Log metrics with MLflow
+                if self.mlflow_enabled:
+                    try:
+                        if mlflow.active_run():
+                            metrics_dict = {
+                                "total_loss": total_loss.item(),
+                                "data_loss": data_loss.item(),
+                                "physics_loss": physics_loss.item()
+                            }
+                            
+                            # Add parameter values to metrics dict
+                            if len(self.learnable_params) > 0:
+                                param_dict = {name: param.item() for name, param in self.learnable_params.items()}
+                                metrics_dict.update(param_dict)
+                            
+                            mlflow.log_metrics(metrics_dict, step=adam_epochs + current_iter)
+                            logger.debug(f"Logged metrics to MLflow at L-BFGS iteration {current_iter}")
+                    except Exception as e:
+                        logger.warning(f"Failed to log metrics to MLflow at L-BFGS iteration {current_iter}: {e}")
+                
+                # Log metrics to CSV
+                try:
+                    row_data = {
+                        'epoch': adam_epochs + current_iter,
+                        'total_loss': total_loss.item(),
+                        'data_loss': data_loss.item(),
+                        'physics_loss': physics_loss.item()
+                    }
+                    
+                    if len(self.learnable_params) > 0:
+                        for name, param in self.learnable_params.items():
+                            row_data[name] = param.item()
+                    
+                    with open(csv_file_path, 'a', newline='') as csvfile:
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        writer.writerow(row_data)
+                except Exception as e:
+                    logger.warning(f"Failed to log metrics to CSV at L-BFGS iteration {current_iter}: {e}")
+                
+                lbfgs_iteration[0] += 1
                 return total_loss
 
             optimizer_lbfgs.step(closure)

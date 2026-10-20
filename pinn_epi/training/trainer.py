@@ -10,6 +10,7 @@ import mlflow
 import mlflow.pytorch
 import hydra
 import os
+import csv
 from pinn_epi.utils.device_utils import DEVICE  # Import the centralized device
 
 # Set up logging
@@ -320,6 +321,19 @@ class PINNTrainer:
             if collocation_points.nelement() == 0:
                 raise ValueError("No collocation points generated.")
 
+            # Setup CSV logging
+            hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+            csv_file_path = os.path.join(hydra_output_dir, "training_metrics.csv")
+            
+            # Initialize CSV file with headers
+            fieldnames = ['epoch', 'total_loss', 'data_loss', 'physics_loss']
+            if len(self.learnable_params) > 0:
+                fieldnames.extend(list(self.learnable_params.keys()))
+            
+            with open(csv_file_path, 'w', newline='') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+            
             # Adam phase
             for epoch in range(adam_epochs):
                 optimizer_adam.zero_grad()
@@ -357,6 +371,25 @@ class PINNTrainer:
                                 logger.debug(f"Logged metrics to MLflow at epoch {epoch}")
                         except Exception as e:
                             logger.warning(f"Failed to log metrics to MLflow at epoch {epoch}: {e}")
+                    
+                    # Log metrics to CSV
+                    try:
+                        row_data = {
+                            'epoch': epoch,
+                            'total_loss': total_loss.item(),
+                            'data_loss': data_loss.item(),
+                            'physics_loss': physics_loss.item()
+                        }
+                        
+                        if len(self.learnable_params) > 0:
+                            for name, param in self.learnable_params.items():
+                                row_data[name] = param.item()
+                        
+                        with open(csv_file_path, 'a', newline='') as csvfile:
+                            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                            writer.writerow(row_data)
+                    except Exception as e:
+                        logger.warning(f"Failed to log metrics to CSV at epoch {epoch}: {e}")
 
             # L-BFGS phase
             def closure():
@@ -388,6 +421,7 @@ class PINNTrainer:
                     logger.warning(f"Failed to log model save path to MLflow: {e}")
 
             logger.info("Training completed successfully")
+            logger.info(f"Training metrics saved to: {csv_file_path}")
             
         except Exception as e:
             logger.error(f"Training failed with error: {e}")

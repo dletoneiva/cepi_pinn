@@ -353,13 +353,13 @@ class PINNTrainer:
                     
                     logger.info(log_message)
                     
-                    # Log metrics with MLflow
+                    # Log metrics with MLflow (use numeric phase identifier)
                     if self.mlflow_enabled:
                         try:
                             if mlflow.active_run():
                                 metrics_dict = {
-                                    "phase": "adam",
-                                    "epoch": epoch,
+                                    "phase": 0.0,  # 0 for Adam phase
+                                    "epoch": float(epoch),
                                     "total_loss": total_loss.item(),
                                     "data_loss": data_loss.item(),
                                     "physics_loss": physics_loss.item()
@@ -375,7 +375,7 @@ class PINNTrainer:
                         except Exception as e:
                             logger.warning(f"Failed to log metrics to MLflow at epoch {epoch}: {e}")
                     
-                    # Log metrics to CSV
+                    # Log metrics to CSV (keep string phase for readability)
                     try:
                         row_data = {
                             'phase': 'adam',
@@ -414,13 +414,13 @@ class PINNTrainer:
                 
                 logger.info(log_message)
                 
-                # Log metrics with MLflow
+                # Log metrics with MLflow (use numeric phase identifier)
                 if self.mlflow_enabled:
                     try:
                         if mlflow.active_run():
                             metrics_dict = {
-                                "phase": "lbfgs",
-                                "epoch": current_iter,
+                                "phase": 1.0,  # 1 for L-BFGS phase
+                                "epoch": float(current_iter),
                                 "total_loss": total_loss.item(),
                                 "data_loss": data_loss.item(),
                                 "physics_loss": physics_loss.item()
@@ -436,7 +436,7 @@ class PINNTrainer:
                     except Exception as e:
                         logger.warning(f"Failed to log metrics to MLflow at L-BFGS iteration {current_iter}: {e}")
                 
-                # Log metrics to CSV
+                # Log metrics to CSV (keep string phase for readability)
                 try:
                     row_data = {
                         'phase': 'lbfgs',

@@ -11,6 +11,7 @@ import mlflow.pytorch
 import hydra
 import os
 import csv
+import numpy as np
 from pinn_epi.utils.device_utils import DEVICE  # Import the centralized device
 
 # Set up logging
@@ -177,6 +178,128 @@ class PINNTrainer:
 
         return total_loss, data_loss, physics_loss
 
+    def compute_residual_loss_landscape(self, t_data: torch.Tensor, collocation_points: torch.Tensor, 
+                                     param_name: str, param_values: np.ndarray, 
+                                     current_param_value: float, checkpoint_info: dict):
+        """Compute loss landscape for a specific parameter around its current value.
+        
+        Args:
+            t_data: Time points for the empirical data
+            collocation_points: Collocation points for physics loss
+            param_name: Name of the parameter to vary
+            param_values: Array of parameter values to test
+            current_param_value: Current value of the parameter
+            checkpoint_info: Dictionary with phase and epoch information
+        """
+        # Store original parameter value
+        original_value = self.physics_model.parameters[param_name].clone()
+        
+        # Get the original parameter tensor (could be learnable or fixed)
+        param_tensor = self.physics_model.parameters[param_name]
+        
+        # Results storage
+        results = []
+        
+        # Evaluate loss at each parameter value
+        for val in param_values:
+            # Update parameter value
+            if isinstance(param_tensor, nn.Parameter):
+                param_tensor.data.fill_(val)
+            else:
+                self.physics_model.parameters[param_name] = torch.tensor(val, dtype=torch.float32, device=self.device)
+            
+            # Compute loss
+            try:
+                total_loss, data_loss, physics_loss = self.compute_loss(t_data, self.data, collocation_points)
+                results.append({
+                    'parameter': param_name,
+                    'value': val,
+                    'total_loss': total_loss.item(),
+                    'data_loss': data_loss.item(),
+                    'physics_loss': physics_loss.item(),
+                    'is_current': abs(val - current_param_value) < 1e-8,
+                    'phase': checkpoint_info['phase'],
+                    'epoch': checkpoint_info['epoch']
+                })
+            except Exception as e:
+                logger.warning(f"Failed to compute loss for {param_name}={val}: {e}")
+                results.append({
+                    'parameter': param_name,
+                    'value': val,
+                    'total_loss': float('nan'),
+                    'data_loss': float('nan'),
+                    'physics_loss': float('nan'),
+                    'is_current': abs(val - current_param_value) < 1e-8,
+                    'phase': checkpoint_info['phase'],
+                    'epoch': checkpoint_info['epoch']
+                })
+        
+        # Restore original parameter value
+        if isinstance(param_tensor, nn.Parameter):
+            param_tensor.data.fill_(original_value)
+        else:
+            self.physics_model.parameters[param_name] = original_value
+            
+        return results
+
+    def save_loss_landscape(self, results: list, checkpoint_info: dict):
+        """Save loss landscape results to CSV file.
+        
+        Args:
+            results: List of dictionaries containing loss landscape data
+            checkpoint_info: Dictionary with phase and epoch information
+        """
+        if not results:
+            return
+            
+        hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+        csv_file_path = os.path.join(hydra_output_dir, f"loss_landscape_{checkpoint_info['phase']}_{checkpoint_info['epoch']}.csv")
+        
+        fieldnames = ['parameter', 'value', 'total_loss', 'data_loss', 'physics_loss', 'is_current', 'phase', 'epoch']
+        
+        with open(csv_file_path, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            for result in results:
+                writer.writerow(result)
+                
+        logger.info(f"Loss landscape saved to: {csv_file_path}")
+
+    def generate_loss_landscape(self, t_tensor: torch.Tensor, collocation_points: torch.Tensor, 
+                               checkpoint_info: dict):
+        """Generate loss landscape around current parameter values.
+        
+        Args:
+            t_tensor: Time points for the empirical data
+            collocation_points: Collocation points for physics loss
+            checkpoint_info: Dictionary with phase and epoch information
+        """
+        # Get parameters to analyze
+        learnable_param_dict = self.config.get("learnable_parameters", {})
+        if not learnable_param_dict:
+            logger.info("No learnable parameters to analyze for loss landscape")
+            return
+            
+        # For each learnable parameter, generate loss landscape
+        all_results = []
+        for param_name, current_value in learnable_param_dict.items():
+            if param_name in self.physics_model.parameters:
+                # Create parameter grid from -300% to +300% of current value
+                if current_value == 0:
+                    # Handle zero case
+                    param_range = np.linspace(-1.0, 1.0, 101)
+                else:
+                    param_range = np.linspace(-3 * abs(current_value), 3 * abs(current_value), 101)
+                
+                # Compute loss landscape for this parameter
+                results = self.compute_residual_loss_landscape(
+                    t_tensor, collocation_points, param_name, param_range, current_value, checkpoint_info)
+                all_results.extend(results)
+        
+        # Save results
+        if all_results:
+            self.save_loss_landscape(all_results, checkpoint_info)
+
     def save_model_for_inference(self):
         """Save the trained model for later inference.
         
@@ -336,6 +459,7 @@ class PINNTrainer:
                 writer.writeheader()
             
             # Adam phase
+            adam_checkpoint_interval = max(1, adam_epochs // 10)  # Every 10% of training
             for epoch in range(adam_epochs):
                 optimizer_adam.zero_grad()
                 total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, self.data, collocation_points)
@@ -394,9 +518,16 @@ class PINNTrainer:
                             writer.writerow(row_data)
                     except Exception as e:
                         logger.warning(f"Failed to log metrics to CSV at epoch {epoch}: {e}")
+                
+                # Generate loss landscape at checkpoints
+                if epoch % adam_checkpoint_interval == 0 and epoch > 0:
+                    logger.info(f"Generating loss landscape at Adam epoch {epoch}")
+                    checkpoint_info = {'phase': 'adam', 'epoch': epoch}
+                    self.generate_loss_landscape(t_tensor, collocation_points, checkpoint_info)
 
             # L-BFGS phase with iteration tracking
             lbfgs_iteration = [0]  # Use list to make it mutable in closure
+            lbfgs_checkpoint_interval = max(1, lbfgs_max_iter // 10)  # Every 10% of training
             
             def closure():
                 optimizer_lbfgs.zero_grad()
@@ -455,6 +586,12 @@ class PINNTrainer:
                         writer.writerow(row_data)
                 except Exception as e:
                     logger.warning(f"Failed to log metrics to CSV at L-BFGS iteration {current_iter}: {e}")
+                
+                # Generate loss landscape at checkpoints
+                if current_iter % lbfgs_checkpoint_interval == 0 and current_iter > 0:
+                    logger.info(f"Generating loss landscape at L-BFGS iteration {current_iter}")
+                    checkpoint_info = {'phase': 'lbfgs', 'epoch': current_iter}
+                    self.generate_loss_landscape(t_tensor, collocation_points, checkpoint_info)
                 
                 lbfgs_iteration[0] += 1
                 return total_loss

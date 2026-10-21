@@ -400,8 +400,8 @@ class PINNTrainer:
         if not parameter_names:
             parameter_names = self._get_unique_parameter_names_from_results(results)
 
-        loss_keys = ['total_loss', 'data_loss', 'physics_loss']
-        loss_labels = ['Total Loss', 'Data Loss', 'Physics Loss']
+        loss_keys = ['physics_loss', 'data_loss', 'total_loss']
+        loss_labels = ['Physics Loss', 'Data Loss', 'Total Loss']
         loss_key_by_label = {label: key for label, key in zip(loss_labels, loss_keys)}
 
         dimensions = parameter_names + loss_labels
@@ -419,7 +419,25 @@ class PINNTrainer:
 
             return result.get(loss_key_by_label[axis_label])
 
-        # Compute independent raw ranges for every axis.
+        current_values = {}
+        for axis_label in dimensions:
+            for result in results:
+                if not result.get('is_current', False):
+                    continue
+
+                val = get_axis_value(axis_label, result)
+                if val is None:
+                    continue
+
+                try:
+                    numeric_value = float(val)
+                except (TypeError, ValueError):
+                    continue
+
+                if np.isfinite(numeric_value):
+                    current_values[axis_label] = numeric_value
+                    break
+
         axis_ranges = {}
         for axis_label in dimensions:
             vals = _finite([get_axis_value(axis_label, result) for result in results])
@@ -445,9 +463,31 @@ class PINNTrainer:
         for i in range(n_dims):
             ax.plot([i, i], [0, 1], color='black', linewidth=1.5, zorder=1)
 
-        # Add axis labels at top.
+        # Add axis labels and the actual training-snapshot values.
         for i, dim in enumerate(dimensions):
-            ax.text(i, 1.03, dim, ha='center', va='bottom', fontsize=11, fontweight='bold')
+            ax.text(
+                i,
+                1.03,
+                dim,
+                ha='center',
+                va='bottom',
+                fontsize=10,
+                fontweight='normal',
+                color='black'
+            )
+
+            current_value = current_values.get(dim)
+            if current_value is not None:
+                ax.text(
+                    i,
+                    1.08,
+                    f"{current_value:.4g}",
+                    ha='center',
+                    va='bottom',
+                    fontsize=13,
+                    fontweight='bold',
+                    color='darkred'
+                )
 
         # Add raw-value tick labels to each axis.
         if n_dims > 10:
@@ -457,20 +497,41 @@ class PINNTrainer:
         else:
             n_ticks = 5
 
+        tick_fontsize = 10
+        current_tick_fontsize = 12
+
         for i, axis_label in enumerate(dimensions):
             lo, hi = axis_ranges[axis_label]
+            current_value = current_values.get(axis_label)
+            tick_fracs = []
+
             for t in range(n_ticks):
                 frac = t / (n_ticks - 1) if n_ticks > 1 else 0.5
                 val = lo + frac * (hi - lo)
+                tick_fracs.append(frac)
                 ax.text(
                     i - 0.03,
                     frac,
                     f'{val:.4g}',
                     ha='right',
                     va='center',
-                    fontsize=7,
+                    fontsize=tick_fontsize,
                     color='gray'
                 )
+
+            if current_value is not None:
+                current_y = value_to_y(axis_label, current_value)
+                if 0.0 <= current_y <= 1.0 and not any(abs(current_y - frac) < 0.02 for frac in tick_fracs):
+                    ax.text(
+                        i - 0.03,
+                        current_y,
+                        f'{current_value:.4g}',
+                        ha='right',
+                        va='center',
+                        fontsize=current_tick_fontsize,
+                        fontweight='bold',
+                        color='darkred'
+                    )
 
         # Color mapping for swept parameters.
         colors = plt.cm.tab20(np.linspace(0, 1, max(n_param_axes, 1)))
@@ -548,7 +609,7 @@ class PINNTrainer:
 
         # Set plot limits and appearance.
         ax.set_xlim(-0.5, n_dims - 0.5)
-        ax.set_ylim(-0.05, 1.08)
+        ax.set_ylim(-0.05, 1.15)
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():

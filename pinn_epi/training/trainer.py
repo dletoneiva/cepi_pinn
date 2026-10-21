@@ -439,12 +439,12 @@ class PINNTrainer:
             self._loss_landscape_figures.append(fig)
 
     def _create_loss_landscape_figure(self, results: list, checkpoint_info: dict):
-        """Create a matplotlib figure with parallel coordinates for loss landscape.
+        """Create a matplotlib figure with two-column subplots for the loss landscape.
 
-        Each compartmental parameter becomes its own vertical axis. For a model
-        like SIR, the axes include `beta` and `gamma`, so each row represents an
-        n-order parameter set. Loss axes are shown with raw per-axis scales and
-        raw tick labels.
+        Each swept parameter gets its own parallel-coordinates subplot, arranged in
+        a two-column grid. Axis labels are placed on top of each vertical line with a
+        blank (white) background so they remain legible. There is no legend, and no
+        value text is drawn above the axis titles.
 
         Args:
             results: List of dictionaries containing loss landscape data
@@ -478,7 +478,6 @@ class PINNTrainer:
 
         dimensions = parameter_names + loss_labels
         n_dims = len(dimensions)
-        n_param_axes = len(parameter_names)
         x_positions = np.arange(n_dims)
 
         def get_axis_value(axis_label: str, result: dict):
@@ -528,40 +527,37 @@ class PINNTrainer:
                 return 0.5
             return (float(value) - lo) / (hi - lo)
 
-        # Create figure
-        fig, ax = plt.subplots(figsize=(12, 8))
+        def line_points(result):
+            ys = []
+            for axis_label in dimensions:
+                val = get_axis_value(axis_label, result)
+                if val is None:
+                    return None
+                try:
+                    numeric_value = float(val)
+                except (TypeError, ValueError):
+                    return None
+                if not np.isfinite(numeric_value):
+                    return None
+                ys.append(value_to_y(axis_label, numeric_value))
+            return ys
 
-        # Draw vertical axis lines.
-        for i in range(n_dims):
-            ax.plot([i, i], [0, 1], color='black', linewidth=1.5, zorder=1)
+        # Determine which parameters were actually swept at this checkpoint.
+        swept_params = []
+        for result in results:
+            name = result.get('parameter')
+            if name and name not in swept_params:
+                swept_params.append(name)
 
-        # Add axis labels and the actual training-snapshot values.
-        for i, dim in enumerate(dimensions):
-            ax.text(
-                i,
-                1.03,
-                dim,
-                ha='center',
-                va='bottom',
-                fontsize=10,
-                fontweight='normal',
-                color='black'
-            )
+        if not swept_params:
+            swept_params = parameter_names
 
-            current_value = current_values.get(dim)
-            if current_value is not None:
-                ax.text(
-                    i,
-                    1.08,
-                    f"{current_value:.4g}",
-                    ha='center',
-                    va='bottom',
-                    fontsize=13,
-                    fontweight='bold',
-                    color='darkred'
-                )
+        n_params = len(swept_params)
+        n_cols = 2
+        n_rows = max(1, int(np.ceil(n_params / n_cols)))
 
-        # Add raw-value tick labels to each axis.
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, 5 * n_rows), squeeze=False)
+
         if n_dims > 10:
             n_ticks = 2
         elif n_dims > 6:
@@ -570,129 +566,106 @@ class PINNTrainer:
             n_ticks = 5
 
         tick_fontsize = 10
-        current_tick_fontsize = 12
+        current_tick_fontsize = 11
 
-        for i, axis_label in enumerate(dimensions):
-            lo, hi = axis_ranges[axis_label]
-            current_value = current_values.get(axis_label)
-            tick_fracs = []
+        for flat_idx in range(n_rows * n_cols):
+            ax = axes[flat_idx // n_cols][flat_idx % n_cols]
 
-            for t in range(n_ticks):
-                frac = t / (n_ticks - 1) if n_ticks > 1 else 0.5
-                val = lo + frac * (hi - lo)
-                tick_fracs.append(frac)
+            if flat_idx >= n_params:
+                ax.axis('off')
+                continue
+
+            param = swept_params[flat_idx]
+            sub_results = [r for r in results if r.get('parameter') == param]
+
+            # Draw vertical axis lines.
+            for i in range(n_dims):
+                ax.plot([i, i], [0, 1], color='black', linewidth=1.5, zorder=1)
+
+            # Axis labels on top with a blank background so they stand out.
+            for i, dim in enumerate(dimensions):
                 ax.text(
-                    i - 0.03,
-                    frac,
-                    f'{val:.4g}',
-                    ha='right',
-                    va='center',
-                    fontsize=tick_fontsize,
-                    color='gray'
+                    i,
+                    1.04,
+                    dim,
+                    ha='center',
+                    va='bottom',
+                    fontsize=11,
+                    fontweight='bold',
+                    color='black',
+                    zorder=4,
+                    bbox=dict(facecolor='white', edgecolor='none', pad=1.0),
                 )
 
-            if current_value is not None:
-                current_y = value_to_y(axis_label, current_value)
-                if 0.0 <= current_y <= 1.0 and not any(abs(current_y - frac) < 0.02 for frac in tick_fracs):
+            # Add raw-value tick labels to each axis.
+            for i, axis_label in enumerate(dimensions):
+                lo, hi = axis_ranges[axis_label]
+                current_value = current_values.get(axis_label)
+                tick_fracs = []
+
+                for t in range(n_ticks):
+                    frac = t / (n_ticks - 1) if n_ticks > 1 else 0.5
+                    val = lo + frac * (hi - lo)
+                    tick_fracs.append(frac)
                     ax.text(
                         i - 0.03,
-                        current_y,
-                        f'{current_value:.4g}',
+                        frac,
+                        f'{val:.4g}',
                         ha='right',
                         va='center',
-                        fontsize=current_tick_fontsize,
-                        fontweight='bold',
-                        color='darkred'
+                        fontsize=tick_fontsize,
+                        color='gray'
                     )
 
-        # Color mapping for swept parameters.
-        colors = plt.cm.tab20(np.linspace(0, 1, max(n_param_axes, 1)))
-        param_color_map = {name: colors[idx] for idx, name in enumerate(parameter_names)}
+                if current_value is not None:
+                    current_y = value_to_y(axis_label, current_value)
+                    if 0.0 <= current_y <= 1.0 and not any(abs(current_y - frac) < 0.02 for frac in tick_fracs):
+                        ax.text(
+                            i - 0.03,
+                            current_y,
+                            f'{current_value:.4g}',
+                            ha='right',
+                            va='center',
+                            fontsize=current_tick_fontsize,
+                            fontweight='bold',
+                            color='darkred'
+                        )
 
-        # Draw lines for each result.
-        for result in results:
-            ys = []
-            valid = True
+            # Draw sweep lines for this parameter.
+            for result in sub_results:
+                ys = line_points(result)
+                if ys is None:
+                    continue
+                ax.plot(x_positions, ys, color='steelblue', alpha=0.4, linewidth=1, zorder=2)
 
-            for axis_label in dimensions:
-                val = get_axis_value(axis_label, result)
-                if val is None:
-                    valid = False
-                    break
+            # Highlight the current parameter value for this sweep.
+            for result in sub_results:
+                if not result.get('is_current', False):
+                    continue
+                ys = line_points(result)
+                if ys is None:
+                    continue
+                ax.plot(
+                    x_positions,
+                    ys,
+                    color='darkred',
+                    linewidth=2.5,
+                    marker='o',
+                    markersize=5,
+                    zorder=3,
+                )
 
-                try:
-                    numeric_value = float(val)
-                except (TypeError, ValueError):
-                    valid = False
-                    break
+            ax.set_xlim(-0.5, n_dims - 0.5)
+            ax.set_ylim(-0.05, 1.12)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_visible(False)
 
-                if not np.isfinite(numeric_value):
-                    valid = False
-                    break
+            ax.set_title(f'Sweep: {param}', fontsize=12)
 
-                ys.append(value_to_y(axis_label, numeric_value))
-
-            if not valid:
-                continue
-
-            color = param_color_map.get(result.get('parameter'), 'gray')
-            ax.plot(x_positions, ys, color=color, alpha=0.3, linewidth=1, zorder=2)
-
-        # Highlight current parameter values.
-        for result in results:
-            if not result.get('is_current', False):
-                continue
-
-            ys = []
-            valid = True
-
-            for axis_label in dimensions:
-                val = get_axis_value(axis_label, result)
-                if val is None:
-                    valid = False
-                    break
-
-                try:
-                    numeric_value = float(val)
-                except (TypeError, ValueError):
-                    valid = False
-                    break
-
-                if not np.isfinite(numeric_value):
-                    valid = False
-                    break
-
-                ys.append(value_to_y(axis_label, numeric_value))
-
-            if not valid:
-                continue
-
-            color = param_color_map.get(result.get('parameter'), 'gray')
-            ax.plot(
-                x_positions,
-                ys,
-                color=color,
-                linewidth=3,
-                marker='o',
-                markersize=6,
-                zorder=3,
-                label=f"{result.get('parameter', 'current')} (current)"
-            )
-
-        # Set plot limits and appearance.
-        ax.set_xlim(-0.5, n_dims - 0.5)
-        ax.set_ylim(-0.05, 1.15)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-
-        ax.set_title(f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}')
-
-        # Legend
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-
-        fig.tight_layout()
+        fig.suptitle(f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}')
+        fig.tight_layout(rect=[0, 0, 1, 0.96])
         return fig
 
     def generate_loss_landscape(self, t_tensor: torch.Tensor, collocation_points: torch.Tensor, 

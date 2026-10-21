@@ -1,7 +1,7 @@
 """Training orchestrator for PINN models."""
 
 import torch
-import torch.nn as nn
+import torch.nn import nn
 import logging
 from typing import Tuple, Dict, Any
 from pinn_epi.models.networks import ModularPINN
@@ -274,15 +274,24 @@ class PINNTrainer:
             collocation_points: Collocation points for physics loss
             checkpoint_info: Dictionary with phase and epoch information
         """
-        # Get parameters to analyze
+        # Get parameters to analyze - use learnable parameters if available, otherwise use all model parameters
         learnable_param_dict = self.config.get("learnable_parameters", {})
+        
+        # If no learnable parameters, use all parameters from the physics model
         if not learnable_param_dict:
-            logger.info("No learnable parameters to analyze for loss landscape")
+            logger.info("No learnable parameters found, using all model parameters for loss landscape")
+            param_dict = {k: v.item() if isinstance(v, torch.Tensor) else v 
+                         for k, v in self.physics_model.parameters.items()}
+        else:
+            param_dict = learnable_param_dict
+            
+        if not param_dict:
+            logger.info("No parameters to analyze for loss landscape")
             return
             
-        # For each learnable parameter, generate loss landscape
+        # For each parameter, generate loss landscape
         all_results = []
-        for param_name, current_value in learnable_param_dict.items():
+        for param_name, current_value in param_dict.items():
             if param_name in self.physics_model.parameters:
                 # Create parameter grid from -300% to +300% of current value
                 if current_value == 0:

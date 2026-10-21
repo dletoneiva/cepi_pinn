@@ -1,7 +1,7 @@
 """Training orchestrator for PINN models."""
 
 import torch
-import torch.nn import nn
+import torch.nn as nn
 import logging
 from typing import Tuple, Dict, Any
 from pinn_epi.models.networks import ModularPINN

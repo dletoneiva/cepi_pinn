@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 import logging
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional
 from pinn_epi.models.networks import ModularPINN
 from pinn_epi.models.physics import CompartmentalModel
 import mlflow
@@ -13,6 +13,7 @@ import os
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from pinn_epi.utils.device_utils import DEVICE  # Import the centralized device
 
 # Set up logging
@@ -95,6 +96,14 @@ class PINNTrainer:
                 raise ValueError(f"Parameter '{param_name}' marked as learnable but not found in model parameters. "
                                  f"Available parameters: {list(self.physics_model.parameters.keys())}")
 
+        # Combined loss-landscape artifact state for a single training run.
+        self._loss_landscape_rows: list = []
+        self._loss_landscape_fieldnames: list = []
+        self._loss_landscape_figures: list = []
+        self._loss_landscape_output_dir: Optional[str] = None
+        self._loss_landscape_csv_path: Optional[str] = None
+        self._loss_landscape_pdf_path: Optional[str] = None
+
     @staticmethod
     def _as_scalar_float(value: Any) -> float:
         """Convert a scalar-like parameter value to float, preserving NaN for invalid values."""
@@ -146,6 +155,57 @@ class PINNTrainer:
             if name and name not in self._RESERVED_COLUMNS and name not in names:
                 names.append(name)
         return names
+
+    def _close_loss_landscape_figures(self) -> None:
+        """Close and clear any pending loss-landscape figures."""
+        for fig in getattr(self, "_loss_landscape_figures", []):
+            plt.close(fig)
+        self._loss_landscape_figures = []
+
+    def _reset_loss_landscape_artifacts(self) -> None:
+        """Reset combined loss-landscape artifact state for a new training run."""
+        self._close_loss_landscape_figures()
+        self._loss_landscape_rows = []
+        self._loss_landscape_fieldnames = []
+        self._loss_landscape_figures = []
+        self._loss_landscape_output_dir = None
+        self._loss_landscape_csv_path = None
+        self._loss_landscape_pdf_path = None
+
+    def _ensure_loss_landscape_paths(self) -> None:
+        """Ensure combined loss-landscape output paths exist."""
+        if self._loss_landscape_output_dir is None:
+            hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+            self._loss_landscape_output_dir = os.path.join(hydra_output_dir, "loss_landscape")
+            os.makedirs(self._loss_landscape_output_dir, exist_ok=True)
+            self._loss_landscape_csv_path = os.path.join(
+                self._loss_landscape_output_dir,
+                "loss_landscape.csv"
+            )
+            self._loss_landscape_pdf_path = os.path.join(
+                self._loss_landscape_output_dir,
+                "loss_landscape.pdf"
+            )
+
+    def _finalize_loss_landscape_artifacts(self) -> None:
+        """Write all pending loss-landscape figures into one multi-page PDF."""
+        if not self._loss_landscape_figures:
+            return
+
+        self._ensure_loss_landscape_paths()
+
+        if self._loss_landscape_pdf_path is None:
+            return
+
+        try:
+            with PdfPages(self._loss_landscape_pdf_path) as pdf:
+                for fig in self._loss_landscape_figures:
+                    pdf.savefig(fig)
+            logger.info(f"Combined loss landscape PDF saved to: {self._loss_landscape_pdf_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save combined loss landscape PDF: {e}")
+        finally:
+            self._close_loss_landscape_figures()
 
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """Sample collocation points for physics loss evaluation.
@@ -319,7 +379,7 @@ class PINNTrainer:
         return results
 
     def save_loss_landscape(self, results: list, checkpoint_info: dict):
-        """Save loss landscape results to CSV file and generate PDF plot.
+        """Append loss landscape results to one combined CSV and queue one PDF page.
         
         Args:
             results: List of dictionaries containing loss landscape data
@@ -327,21 +387,15 @@ class PINNTrainer:
         """
         if not results:
             return
-            
-        # Create loss_landscape directory if it doesn't exist
-        hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-        loss_landscape_dir = os.path.join(hydra_output_dir, "loss_landscape")
-        os.makedirs(loss_landscape_dir, exist_ok=True)
-        
-        # Save CSV file
-        csv_file_path = os.path.join(loss_landscape_dir, f"loss_landscape_{checkpoint_info['phase']}_{checkpoint_info['epoch']}.csv")
+
+        self._ensure_loss_landscape_paths()
         
         parameter_names = self._get_parameter_names()
 
         if not parameter_names:
             parameter_names = self._get_unique_parameter_names_from_results(results)
 
-        fieldnames = (
+        desired_fields = (
             parameter_names
             + [
                 'total_loss',
@@ -354,22 +408,38 @@ class PINNTrainer:
                 'epoch',
             ]
         )
-        fieldnames = list(dict.fromkeys(fieldnames))
-        
-        with open(csv_file_path, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
-            writer.writeheader()
-            for result in results:
-                row = {field: result.get(field, float('nan')) for field in fieldnames}
-                writer.writerow(row)
-                
-        logger.info(f"Loss landscape saved to: {csv_file_path}")
-        
-        # Generate PDF plot
-        self.plot_loss_landscape(results, checkpoint_info, loss_landscape_dir)
 
-    def plot_loss_landscape(self, results: list, checkpoint_info: dict, output_dir: str):
-        """Generate matplotlib PDF plot with parallel coordinates for loss landscape.
+        for field in desired_fields:
+            if field not in self._loss_landscape_fieldnames:
+                self._loss_landscape_fieldnames.append(field)
+
+        # Preserve any extra keys that may appear in individual result rows.
+        for result in results:
+            for field in result.keys():
+                if field not in self._loss_landscape_fieldnames:
+                    self._loss_landscape_fieldnames.append(field)
+
+        self._loss_landscape_rows.extend(results)
+
+        with open(self._loss_landscape_csv_path, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(
+                csvfile,
+                fieldnames=self._loss_landscape_fieldnames,
+                extrasaction='ignore'
+            )
+            writer.writeheader()
+            for result in self._loss_landscape_rows:
+                row = {field: result.get(field, float('nan')) for field in self._loss_landscape_fieldnames}
+                writer.writerow(row)
+
+        logger.info(f"Combined loss landscape CSV updated at: {self._loss_landscape_csv_path}")
+
+        fig = self._create_loss_landscape_figure(results, checkpoint_info)
+        if fig is not None:
+            self._loss_landscape_figures.append(fig)
+
+    def _create_loss_landscape_figure(self, results: list, checkpoint_info: dict):
+        """Create a matplotlib figure with parallel coordinates for loss landscape.
 
         Each compartmental parameter becomes its own vertical axis. For a model
         like SIR, the axes include `beta` and `gamma`, so each row represents an
@@ -379,10 +449,12 @@ class PINNTrainer:
         Args:
             results: List of dictionaries containing loss landscape data
             checkpoint_info: Dictionary with phase and epoch information
-            output_dir: Directory to save the PDF plot
+
+        Returns:
+            matplotlib.figure.Figure or None
         """
         if not results:
-            return
+            return None
 
         def _finite(values):
             finite_values = []
@@ -620,13 +692,8 @@ class PINNTrainer:
         # Legend
         ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
 
-        # Save plot
-        plot_file_path = os.path.join(output_dir, f"loss_landscape_{checkpoint_info['phase']}_{checkpoint_info['epoch']}.pdf")
-        plt.tight_layout()
-        plt.savefig(plot_file_path, format='pdf', bbox_inches='tight')
-        plt.close()
-
-        logger.info(f"Loss landscape plot saved to: {plot_file_path}")
+        fig.tight_layout()
+        return fig
 
     def generate_loss_landscape(self, t_tensor: torch.Tensor, collocation_points: torch.Tensor, 
                                checkpoint_info: dict):
@@ -791,6 +858,8 @@ class PINNTrainer:
             logger.info("MLflow logging is disabled")
             
         try:
+            self._reset_loss_landscape_artifacts()
+
             # Prepare data - extract time tensor and observed data dictionary
             t_array = self.data['t']
             
@@ -1005,6 +1074,8 @@ class PINNTrainer:
             logger.error(f"Training failed with error: {e}")
             raise
         finally:
+            self._finalize_loss_landscape_artifacts()
+
             # End MLflow run if we started it
             if self.mlflow_enabled and should_end_run and mlflow.active_run():
                 try:

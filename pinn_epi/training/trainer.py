@@ -281,11 +281,11 @@ class PINNTrainer:
 
     def plot_loss_landscape(self, results: list, checkpoint_info: dict, output_dir: str):
         """Generate matplotlib PDF plot with parallel coordinates for loss landscape.
-        
-        The parameter column is treated as a categorical axis (each parameter name
-        is a category), and loss values are shown on their own independent per-axis
-        scales without global normalization.
-        
+
+        Each unique value in the "parameter" column is drawn as its own vertical
+        axis. Parameter values and loss values are shown on independent per-axis
+        scales with raw tick labels rather than being globally normalized.
+
         Args:
             results: List of dictionaries containing loss landscape data
             checkpoint_info: Dictionary with phase and epoch information
@@ -293,143 +293,186 @@ class PINNTrainer:
         """
         if not results:
             return
-            
-        # Group results by parameter
-        param_data = {}
-        for result in results:
-            param = result['parameter']
-            if param not in param_data:
-                param_data[param] = {'values': [], 'total_loss': [], 'data_loss': [], 'physics_loss': []}
-            param_data[param]['values'].append(result['value'])
-            param_data[param]['total_loss'].append(result['total_loss'])
-            param_data[param]['data_loss'].append(result['data_loss'])
-            param_data[param]['physics_loss'].append(result['physics_loss'])
-        
-        # Get unique parameter names as categories
-        param_names = list(param_data.keys())
-        n_params = len(param_names)
-        
-        # Define dimensions: first axis is categorical (parameter name),
-        # remaining axes are numeric loss values shown on raw scales
-        dimensions = ['Parameter'] + ['Total Loss', 'Data Loss', 'Physics Loss']
-        n_dims = len(dimensions)
+
+        def _finite(values):
+            finite_values = []
+            for value in values:
+                try:
+                    numeric_value = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if np.isfinite(numeric_value):
+                    finite_values.append(numeric_value)
+            return finite_values
+
+        # Each unique parameter name becomes its own vertical axis.
+        param_names = list(dict.fromkeys([result['parameter'] for result in results]))
         loss_keys = ['total_loss', 'data_loss', 'physics_loss']
-        
-        # Compute per-axis ranges for loss dimensions using raw (unnormalized) values
+        loss_labels = ['Total Loss', 'Data Loss', 'Physics Loss']
+
+        dimensions = param_names + loss_labels
+        n_dims = len(dimensions)
+        n_param_axes = len(param_names)
+        x_positions = np.arange(n_dims)
+
+        # Compute independent raw ranges for every axis.
         axis_ranges = {}
-        for key in loss_keys:
-            vals = [r[key] for r in results if not np.isnan(r[key])]
+
+        for param_name in param_names:
+            vals = _finite([
+                result['value']
+                for result in results
+                if result['parameter'] == param_name
+            ])
             if vals:
                 lo, hi = min(vals), max(vals)
                 if lo == hi:
                     lo -= 0.5
                     hi += 0.5
-                axis_ranges[key] = (lo, hi)
+                axis_ranges[param_name] = (lo, hi)
             else:
-                axis_ranges[key] = (0.0, 1.0)
-        
+                axis_ranges[param_name] = (0.0, 1.0)
+
+        for key, label in zip(loss_keys, loss_labels):
+            vals = _finite([result[key] for result in results])
+            if vals:
+                lo, hi = min(vals), max(vals)
+                if lo == hi:
+                    lo -= 0.5
+                    hi += 0.5
+                axis_ranges[label] = (lo, hi)
+            else:
+                axis_ranges[label] = (0.0, 1.0)
+
+        def value_to_y(axis_label, value):
+            lo, hi = axis_ranges[axis_label]
+            if hi == lo:
+                return 0.5
+            return (float(value) - lo) / (hi - lo)
+
         # Create figure
         fig, ax = plt.subplots(figsize=(12, 8))
-        
-        # X positions for each axis
-        x_positions = np.arange(n_dims)
-        
-        # Helper: map a value to a visual y-position on a given axis.
-        # For the categorical axis, parameter names are placed at evenly
-        # spaced positions. For loss axes, raw values are mapped using
-        # each axis's own independent range (no global normalization).
-        def value_to_y(dim_index, value):
-            if dim_index == 0:
-                # Categorical axis: position based on parameter name index
-                if value in param_names:
-                    cat_idx = param_names.index(value)
-                    if n_params > 1:
-                        return cat_idx / (n_params - 1)
-                    return 0.5
-                return 0.5
-            else:
-                # Loss axis: map raw value using this axis's own range
-                key = loss_keys[dim_index - 1]
-                lo, hi = axis_ranges[key]
-                return (value - lo) / (hi - lo)
-        
-        # Draw vertical axis lines
+
+        # Draw vertical axis lines.
         for i in range(n_dims):
             ax.plot([i, i], [0, 1], color='black', linewidth=1.5, zorder=1)
-        
-        # Add axis labels at top
+
+        # Add axis labels at top.
         for i, dim in enumerate(dimensions):
             ax.text(i, 1.03, dim, ha='center', va='bottom', fontsize=11, fontweight='bold')
-        
-        # Add category tick labels on the parameter (categorical) axis
-        for cat_idx, name in enumerate(param_names):
-            y_pos = cat_idx / max(n_params - 1, 1) if n_params > 1 else 0.5
-            ax.text(-0.03, y_pos, name, ha='right', va='center', fontsize=9, color='black')
-        
-        # Add tick labels for loss axes showing actual (raw) values
-        n_ticks = 5
-        for i, key in enumerate(loss_keys):
-            dim_index = i + 1
-            lo, hi = axis_ranges[key]
+
+        # Add raw-value tick labels to each axis.
+        n_ticks = 3 if n_dims > 6 else 5
+        for i, axis_label in enumerate(dimensions):
+            lo, hi = axis_ranges[axis_label]
             for t in range(n_ticks):
-                frac = t / (n_ticks - 1)
+                frac = t / (n_ticks - 1) if n_ticks > 1 else 0.5
                 val = lo + frac * (hi - lo)
-                ax.text(dim_index - 0.03, frac, f'{val:.4g}', ha='right', va='center', fontsize=7, color='gray')
-        
-        # Color mapping for parameters
-        colors = plt.cm.tab10(np.linspace(0, 1, max(n_params, 1)))
+                ax.text(
+                    i - 0.03,
+                    frac,
+                    f'{val:.4g}',
+                    ha='right',
+                    va='center',
+                    fontsize=7,
+                    color='gray'
+                )
+
+        # Color mapping for parameters.
+        colors = plt.cm.tab10(np.linspace(0, 1, max(n_param_axes, 1)))
         param_color_map = {name: colors[idx] for idx, name in enumerate(param_names)}
-        
-        # Draw lines for each result (skip rows with NaN losses)
+        param_index_map = {name: idx for idx, name in enumerate(param_names)}
+
+        # Loss axes are always after the parameter axes.
+        loss_x_indices = list(range(n_param_axes, n_dims))
+
+        # Draw lines for each result.
         for result in results:
             param = result['parameter']
-            color = param_color_map.get(param, 'gray')
-            
-            if np.isnan(result['total_loss']):
+            if param not in param_color_map:
                 continue
-            
-            ys = [
-                value_to_y(0, param),
-                value_to_y(1, result['total_loss']),
-                value_to_y(2, result['data_loss']),
-                value_to_y(3, result['physics_loss']),
-            ]
-            
-            ax.plot(x_positions, ys, color=color, alpha=0.3, linewidth=1, zorder=2)
-        
-        # Highlight current parameter values
+
+            numeric_values = _finite([
+                result['value'],
+                result['total_loss'],
+                result['data_loss'],
+                result['physics_loss']
+            ])
+            if len(numeric_values) != 4:
+                continue
+
+            color = param_color_map[param]
+            param_idx = param_index_map[param]
+
+            y_param = value_to_y(param, result['value'])
+            y_total = value_to_y(loss_labels[0], result['total_loss'])
+            y_data = value_to_y(loss_labels[1], result['data_loss'])
+            y_physics = value_to_y(loss_labels[2], result['physics_loss'])
+
+            line_x = [param_idx] + loss_x_indices
+            line_y = [y_param, y_total, y_data, y_physics]
+
+            ax.plot(line_x, line_y, color=color, alpha=0.3, linewidth=1, zorder=2)
+
+        # Highlight current parameter values.
         for result in results:
-            if result['is_current'] and not np.isnan(result['total_loss']):
-                param = result['parameter']
-                color = param_color_map.get(param, 'gray')
-                ys = [
-                    value_to_y(0, param),
-                    value_to_y(1, result['total_loss']),
-                    value_to_y(2, result['data_loss']),
-                    value_to_y(3, result['physics_loss']),
-                ]
-                ax.plot(x_positions, ys, color=color, linewidth=3, marker='o',
-                        markersize=6, zorder=3, label=f'{param} (current)')
-        
-        # Set plot limits and appearance
+            if not result.get('is_current', False):
+                continue
+
+            param = result['parameter']
+            if param not in param_color_map:
+                continue
+
+            numeric_values = _finite([
+                result['value'],
+                result['total_loss'],
+                result['data_loss'],
+                result['physics_loss']
+            ])
+            if len(numeric_values) != 4:
+                continue
+
+            color = param_color_map[param]
+            param_idx = param_index_map[param]
+
+            y_param = value_to_y(param, result['value'])
+            y_total = value_to_y(loss_labels[0], result['total_loss'])
+            y_data = value_to_y(loss_labels[1], result['data_loss'])
+            y_physics = value_to_y(loss_labels[2], result['physics_loss'])
+
+            line_x = [param_idx] + loss_x_indices
+            line_y = [y_param, y_total, y_data, y_physics]
+
+            ax.plot(
+                line_x,
+                line_y,
+                color=color,
+                linewidth=3,
+                marker='o',
+                markersize=6,
+                zorder=3,
+                label=f'{param} (current)'
+            )
+
+        # Set plot limits and appearance.
         ax.set_xlim(-0.5, n_dims - 0.5)
         ax.set_ylim(-0.05, 1.08)
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():
             spine.set_visible(False)
-        
+
         ax.set_title(f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}')
-        
+
         # Legend
         ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        
+
         # Save plot
         plot_file_path = os.path.join(output_dir, f"loss_landscape_{checkpoint_info['phase']}_{checkpoint_info['epoch']}.pdf")
         plt.tight_layout()
         plt.savefig(plot_file_path, format='pdf', bbox_inches='tight')
         plt.close()
-        
+
         logger.info(f"Loss landscape plot saved to: {plot_file_path}")
 
     def generate_loss_landscape(self, t_tensor: torch.Tensor, collocation_points: torch.Tensor, 
@@ -749,7 +792,7 @@ class PINNTrainer:
                         'phase': 'lbfgs',
                         'epoch': current_iter,
                         'total_loss': total_loss.item(),
-                        'data_loss': data_loss.item(),
+                        'data_loss': total_loss.item(),
                         'physics_loss': physics_loss.item()
                     }
                     

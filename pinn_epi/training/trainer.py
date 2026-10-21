@@ -610,9 +610,9 @@ class PINNTrainer:
                 # Create parameter grid from -300% to +300% of current value
                 if current_value == 0:
                     # Handle zero case
-                    param_range = np.linspace(-1.0, 1.0, 101)
+                    param_range = np.linspace(-1.0, 1.0, 25)
                 else:
-                    param_range = np.linspace(-3 * abs(current_value), 3 * abs(current_value), 101)
+                    param_range = np.linspace(-3 * abs(current_value), 3 * abs(current_value), 25)
                 
                 # Compute loss landscape for this parameter
                 results = self.compute_residual_loss_landscape(

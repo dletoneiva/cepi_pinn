@@ -43,6 +43,17 @@ class PINNTrainer:
         mlflow_enabled: Flag indicating if MLflow logging is active
     """
 
+    _RESERVED_COLUMNS = frozenset({
+        'total_loss',
+        'data_loss',
+        'physics_loss',
+        'parameter',
+        'value',
+        'is_current',
+        'phase',
+        'epoch',
+    })
+
     def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict):
         """Initialize the PINN trainer with model, physics constraints, and training data.
         
@@ -104,6 +115,37 @@ class PINNTrainer:
                 return float(array.reshape(-1)[0])
             except (TypeError, ValueError, IndexError):
                 return float('nan')
+
+    def _get_parameter_names(self) -> list:
+        """Return ordered compartmental parameter names suitable for CSV/plot axes.
+
+        For SIR this should return names such as ['beta', 'gamma'], preserving
+        the order in which they are stored in the physics model.
+        """
+        names = []
+        for name in self.physics_model.parameters.keys():
+            if name in self._RESERVED_COLUMNS or name in names:
+                continue
+            names.append(name)
+        return names
+
+    def _get_parameter_values(self) -> Dict[str, float]:
+        """Return the current full compartmental parameter set as scalar floats."""
+        values: Dict[str, float] = {}
+        for name, value in self.physics_model.parameters.items():
+            if name in self._RESERVED_COLUMNS:
+                continue
+            values[name] = self._as_scalar_float(value)
+        return values
+
+    def _get_unique_parameter_names_from_results(self, results: list) -> list:
+        """Fallback parameter names extracted from result rows."""
+        names = []
+        for result in results:
+            name = result.get('parameter')
+            if name and name not in self._RESERVED_COLUMNS and name not in names:
+                names.append(name)
+        return names
 
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """Sample collocation points for physics loss evaluation.
@@ -222,7 +264,7 @@ class PINNTrainer:
         param_tensor = self.physics_model.parameters[param_name]
 
         # Capture the full compartmental parameter set for each CSV row.
-        all_param_names = list(self.physics_model.parameters.keys())
+        all_param_names = self._get_parameter_names()
         
         # Results storage
         results = []
@@ -248,8 +290,7 @@ class PINNTrainer:
                     'phase': checkpoint_info['phase'],
                     'epoch': checkpoint_info['epoch']
                 }
-                for pname in all_param_names:
-                    row[pname] = self._as_scalar_float(self.physics_model.parameters.get(pname))
+                row.update(self._get_parameter_values())
                 results.append(row)
             except Exception as e:
                 logger.warning(f"Failed to compute loss for {param_name}={val}: {e}")
@@ -263,8 +304,7 @@ class PINNTrainer:
                     'phase': checkpoint_info['phase'],
                     'epoch': checkpoint_info['epoch']
                 }
-                for pname in all_param_names:
-                    row[pname] = self._as_scalar_float(self.physics_model.parameters.get(pname))
+                row.update(self._get_parameter_values())
                 results.append(row)
         
         # Restore original parameter value
@@ -296,29 +336,10 @@ class PINNTrainer:
         # Save CSV file
         csv_file_path = os.path.join(loss_landscape_dir, f"loss_landscape_{checkpoint_info['phase']}_{checkpoint_info['epoch']}.csv")
         
-        reserved_columns = {
-            'total_loss',
-            'data_loss',
-            'physics_loss',
-            'parameter',
-            'value',
-            'is_current',
-            'phase',
-            'epoch',
-        }
-
-        parameter_names = [
-            name for name in self.physics_model.parameters.keys()
-            if name not in reserved_columns
-        ]
+        parameter_names = self._get_parameter_names()
 
         if not parameter_names:
-            parameter_names = [
-                name for name in dict.fromkeys([
-                    result['parameter'] for result in results if 'parameter' in result
-                ])
-                if name not in reserved_columns
-            ]
+            parameter_names = self._get_unique_parameter_names_from_results(results)
 
         fieldnames = (
             parameter_names
@@ -333,9 +354,10 @@ class PINNTrainer:
                 'epoch',
             ]
         )
+        fieldnames = list(dict.fromkeys(fieldnames))
         
         with open(csv_file_path, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
             writer.writeheader()
             for result in results:
                 row = {field: result.get(field, float('nan')) for field in fieldnames}
@@ -373,29 +395,10 @@ class PINNTrainer:
                     finite_values.append(numeric_value)
             return finite_values
 
-        reserved_columns = {
-            'total_loss',
-            'data_loss',
-            'physics_loss',
-            'parameter',
-            'value',
-            'is_current',
-            'phase',
-            'epoch',
-        }
-
-        parameter_names = [
-            name for name in self.physics_model.parameters.keys()
-            if name not in reserved_columns
-        ]
+        parameter_names = self._get_parameter_names()
 
         if not parameter_names:
-            parameter_names = [
-                name for name in dict.fromkeys([
-                    result.get('parameter') for result in results if result.get('parameter')
-                ])
-                if name not in reserved_columns
-            ]
+            parameter_names = self._get_unique_parameter_names_from_results(results)
 
         loss_keys = ['total_loss', 'data_loss', 'physics_loss']
         loss_labels = ['Total Loss', 'Data Loss', 'Physics Loss']
@@ -575,14 +578,26 @@ class PINNTrainer:
         """
         # Get parameters to analyze - use learnable parameters if available, otherwise use all model parameters
         learnable_param_dict = self.config.get("learnable_parameters", {})
+        parameter_names = self._get_parameter_names()
         
         # If no learnable parameters, use all parameters from the physics model
         if not learnable_param_dict:
             logger.info("No learnable parameters found, using all model parameters for loss landscape")
-            param_dict = {k: v.item() if isinstance(v, torch.Tensor) else v 
-                         for k, v in self.physics_model.parameters.items()}
+            param_dict = {
+                name: self._as_scalar_float(self.physics_model.parameters[name])
+                for name in parameter_names
+            }
         else:
-            param_dict = learnable_param_dict
+            param_dict = {}
+            for name, initial_value in learnable_param_dict.items():
+                if name in self.physics_model.parameters and name not in self._RESERVED_COLUMNS:
+                    param_dict[name] = self._as_scalar_float(initial_value)
+            
+            if not param_dict:
+                param_dict = {
+                    name: self._as_scalar_float(self.physics_model.parameters[name])
+                    for name in parameter_names
+                }
             
         if not param_dict:
             logger.info("No parameters to analyze for loss landscape")
@@ -757,13 +772,13 @@ class PINNTrainer:
             hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
             csv_file_path = os.path.join(hydra_output_dir, "training_metrics.csv")
             
-            # Initialize CSV file with headers including phase column
-            fieldnames = ['phase', 'epoch', 'total_loss', 'data_loss', 'physics_loss']
-            if len(self.learnable_params) > 0:
-                fieldnames.extend(list(self.learnable_params.keys()))
+            # Initialize CSV file with headers including phase column and all compartmental parameters
+            parameter_names = self._get_parameter_names()
+            fieldnames = ['phase', 'epoch', 'total_loss', 'data_loss', 'physics_loss'] + parameter_names
+            fieldnames = list(dict.fromkeys(fieldnames))
             
             with open(csv_file_path, 'w', newline='') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
                 writer.writeheader()
             
             # Adam phase
@@ -775,12 +790,14 @@ class PINNTrainer:
                 optimizer_adam.step()
 
                 if epoch % log_interval == 0:
+                    current_parameter_values = self._get_parameter_values()
+
                     # Create log message with loss values and parameter values
                     log_message = f"[Adam] Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}"
                     
                     # Add parameter values to log message
-                    if len(self.learnable_params) > 0:
-                        param_values = ", ".join([f"{name}: {param.item():.4f}" for name, param in self.learnable_params.items()])
+                    if len(current_parameter_values) > 0:
+                        param_values = ", ".join([f"{name}: {value:.4f}" for name, value in current_parameter_values.items()])
                         log_message += f", Parameters: {param_values}"
                     
                     logger.info(log_message)
@@ -797,10 +814,8 @@ class PINNTrainer:
                                     "physics_loss": physics_loss.item()
                                 }
                                 
-                                # Add parameter values to metrics dict
-                                if len(self.learnable_params) > 0:
-                                    param_dict = {name: param.item() for name, param in self.learnable_params.items()}
-                                    metrics_dict.update(param_dict)
+                                # Add all compartmental parameter values to metrics dict
+                                metrics_dict.update(current_parameter_values)
                                 
                                 mlflow.log_metrics(metrics_dict, step=epoch)
                                 logger.debug(f"Logged metrics to MLflow at epoch {epoch}")
@@ -817,12 +832,10 @@ class PINNTrainer:
                             'physics_loss': physics_loss.item()
                         }
                         
-                        if len(self.learnable_params) > 0:
-                            for name, param in self.learnable_params.items():
-                                row_data[name] = param.item()
+                        row_data.update(current_parameter_values)
                         
                         with open(csv_file_path, 'a', newline='') as csvfile:
-                            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
                             writer.writerow(row_data)
                     except Exception as e:
                         logger.warning(f"Failed to log metrics to CSV at epoch {epoch}: {e}")
@@ -842,13 +855,15 @@ class PINNTrainer:
                 total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, self.data, collocation_points)
                 total_loss.backward()
                 
+                current_parameter_values = self._get_parameter_values()
+
                 # Log metrics for L-BFGS iterations
                 current_iter = lbfgs_iteration[0]
                 log_message = f"[L-BFGS] Iteration {current_iter}/{lbfgs_max_iter} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}"
                 
                 # Add parameter values to log message
-                if len(self.learnable_params) > 0:
-                    param_values = ", ".join([f"{name}: {param.item():.4f}" for name, param in self.learnable_params.items()])
+                if len(current_parameter_values) > 0:
+                    param_values = ", ".join([f"{name}: {value:.4f}" for name, value in current_parameter_values.items()])
                     log_message += f", Parameters: {param_values}"
                 
                 logger.info(log_message)
@@ -865,10 +880,8 @@ class PINNTrainer:
                                 "physics_loss": physics_loss.item()
                             }
                             
-                            # Add parameter values to metrics dict
-                            if len(self.learnable_params) > 0:
-                                param_dict = {name: param.item() for name, param in self.learnable_params.items()}
-                                metrics_dict.update(param_dict)
+                            # Add all compartmental parameter values to metrics dict
+                            metrics_dict.update(current_parameter_values)
                             
                             mlflow.log_metrics(metrics_dict, step=adam_epochs + current_iter)
                             logger.debug(f"Logged metrics to MLflow at L-BFGS iteration {current_iter}")
@@ -881,16 +894,14 @@ class PINNTrainer:
                         'phase': 'lbfgs',
                         'epoch': current_iter,
                         'total_loss': total_loss.item(),
-                        'data_loss': total_loss.item(),
+                        'data_loss': data_loss.item(),
                         'physics_loss': physics_loss.item()
                     }
                     
-                    if len(self.learnable_params) > 0:
-                        for name, param in self.learnable_params.items():
-                            row_data[name] = param.item()
+                    row_data.update(current_parameter_values)
                     
                     with open(csv_file_path, 'a', newline='') as csvfile:
-                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
                         writer.writerow(row_data)
                 except Exception as e:
                     logger.warning(f"Failed to log metrics to CSV at L-BFGS iteration {current_iter}: {e}")

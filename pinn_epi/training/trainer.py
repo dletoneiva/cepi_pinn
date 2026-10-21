@@ -280,7 +280,7 @@ class PINNTrainer:
         self.plot_loss_landscape(results, checkpoint_info, loss_landscape_dir)
 
     def plot_loss_landscape(self, results: list, checkpoint_info: dict, output_dir: str):
-        """Generate matplotlib PDF plot with parallel line plot for loss landscape.
+        """Generate matplotlib PDF plot with parallel coordinates for loss landscape.
         
         Args:
             results: List of dictionaries containing loss landscape data
@@ -301,42 +301,80 @@ class PINNTrainer:
             param_data[param]['data_loss'].append(result['data_loss'])
             param_data[param]['physics_loss'].append(result['physics_loss'])
         
-        # Create plot
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # Create parallel coordinates plot
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        # Define the dimensions for parallel coordinates
+        dimensions = ['Parameter Value', 'Total Loss', 'Data Loss', 'Physics Loss']
         
         # Plot for each parameter
-        colors = ['blue', 'red', 'green', 'orange', 'purple']
-        loss_types = ['total_loss', 'data_loss', 'physics_loss']
+        colors = plt.cm.tab10(np.linspace(0, 1, len(param_data)))
         
         for i, (param, data) in enumerate(param_data.items()):
-            color = colors[i % len(colors)]
-            # Normalize parameter values to [0, 1] for plotting
-            param_values = np.array(data['values'])
-            if param_values.max() != param_values.min():
-                normalized_values = (param_values - param_values.min()) / (param_values.max() - param_values.min())
-            else:
-                normalized_values = np.zeros_like(param_values)
+            color = colors[i]
             
-            # Plot each loss type
-            for j, loss_type in enumerate(loss_types):
-                loss_values = np.array(data[loss_type])
-                # Normalize loss values to [0, 1] for plotting
-                if not np.isnan(loss_values).all() and loss_values.max() != loss_values.min():
-                    normalized_loss = (loss_values - loss_values.min()) / (loss_values.max() - loss_values.min())
+            # Normalize all values to [0, 1] for better visualization
+            param_values = np.array(data['values'])
+            total_loss_values = np.array(data['total_loss'])
+            data_loss_values = np.array(data['data_loss'])
+            physics_loss_values = np.array(data['physics_loss'])
+            
+            # Handle normalization for parameter values
+            if param_values.max() != param_values.min():
+                normalized_param = (param_values - param_values.min()) / (param_values.max() - param_values.min())
+            else:
+                normalized_param = np.zeros_like(param_values)
+            
+            # Handle normalization for loss values
+            for loss_type, loss_values in [('total', total_loss_values), ('data', data_loss_values), ('physics', physics_loss_values)]:
+                loss_array = np.array(loss_values)
+                if not np.isnan(loss_array).all() and loss_array.max() != loss_array.min():
+                    if loss_type == 'total':
+                        normalized_total_loss = (loss_array - loss_array.min()) / (loss_array.max() - loss_array.min())
+                    elif loss_type == 'data':
+                        normalized_data_loss = (loss_array - loss_array.min()) / (loss_array.max() - loss_array.min())
+                    elif loss_type == 'physics':
+                        normalized_physics_loss = (loss_array - loss_array.min()) / (loss_array.max() - loss_array.min())
                 else:
-                    normalized_loss = np.zeros_like(loss_values)
-                
-                ax.plot(normalized_values, normalized_loss, 
-                       label=f'{param} - {loss_type}', 
-                       color=color, 
-                       linestyle=['-', '--', ':'][j % 3],
-                       alpha=0.7)
+                    if loss_type == 'total':
+                        normalized_total_loss = np.zeros_like(loss_array)
+                    elif loss_type == 'data':
+                        normalized_data_loss = np.zeros_like(loss_array)
+                    elif loss_type == 'physics':
+                        normalized_physics_loss = np.zeros_like(loss_array)
+            
+            # Create data matrix for parallel coordinates
+            data_matrix = np.column_stack([
+                normalized_param,
+                normalized_total_loss,
+                normalized_data_loss,
+                normalized_physics_loss
+            ])
+            
+            # Plot lines for each data point
+            for row in data_matrix:
+                ax.plot(dimensions, row, color=color, alpha=0.3, linewidth=1)
+            
+            # Highlight the current parameter value
+            current_idx = None
+            for idx, result in enumerate(results):
+                if result['parameter'] == param and result['is_current']:
+                    current_idx = idx
+                    break
+                    
+            if current_idx is not None:
+                current_row = data_matrix[current_idx]
+                ax.plot(dimensions, current_row, color=color, linewidth=3, 
+                       label=f'{param} (current)', marker='o')
         
-        ax.set_xlabel('Normalized Parameter Value')
-        ax.set_ylabel('Normalized Loss Value')
         ax.set_title(f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}')
+        ax.set_ylabel('Normalized Values')
+        ax.set_ylim(0, 1)
         ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         ax.grid(True, alpha=0.3)
+        
+        # Rotate x-axis labels for better readability
+        plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
         
         # Save plot
         plot_file_path = os.path.join(output_dir, f"loss_landscape_{checkpoint_info['phase']}_{checkpoint_info['epoch']}.pdf")

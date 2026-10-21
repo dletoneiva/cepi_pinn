@@ -12,6 +12,7 @@ import hydra
 import os
 import csv
 import numpy as np
+import matplotlib.pyplot as plt
 from pinn_epi.utils.device_utils import DEVICE  # Import the centralized device
 
 # Set up logging
@@ -248,7 +249,7 @@ class PINNTrainer:
         return results
 
     def save_loss_landscape(self, results: list, checkpoint_info: dict):
-        """Save loss landscape results to CSV file.
+        """Save loss landscape results to CSV file and generate PDF plot.
         
         Args:
             results: List of dictionaries containing loss landscape data
@@ -257,8 +258,13 @@ class PINNTrainer:
         if not results:
             return
             
+        # Create loss_landscape directory if it doesn't exist
         hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-        csv_file_path = os.path.join(hydra_output_dir, f"loss_landscape_{checkpoint_info['phase']}_{checkpoint_info['epoch']}.csv")
+        loss_landscape_dir = os.path.join(hydra_output_dir, "loss_landscape")
+        os.makedirs(loss_landscape_dir, exist_ok=True)
+        
+        # Save CSV file
+        csv_file_path = os.path.join(loss_landscape_dir, f"loss_landscape_{checkpoint_info['phase']}_{checkpoint_info['epoch']}.csv")
         
         fieldnames = ['parameter', 'value', 'total_loss', 'data_loss', 'physics_loss', 'is_current', 'phase', 'epoch']
         
@@ -269,6 +275,76 @@ class PINNTrainer:
                 writer.writerow(result)
                 
         logger.info(f"Loss landscape saved to: {csv_file_path}")
+        
+        # Generate PDF plot
+        self.plot_loss_landscape(results, checkpoint_info, loss_landscape_dir)
+
+    def plot_loss_landscape(self, results: list, checkpoint_info: dict, output_dir: str):
+        """Generate matplotlib PDF plot with parallel line plot for loss landscape.
+        
+        Args:
+            results: List of dictionaries containing loss landscape data
+            checkpoint_info: Dictionary with phase and epoch information
+            output_dir: Directory to save the PDF plot
+        """
+        if not results:
+            return
+            
+        # Group results by parameter
+        param_data = {}
+        for result in results:
+            param = result['parameter']
+            if param not in param_data:
+                param_data[param] = {'values': [], 'total_loss': [], 'data_loss': [], 'physics_loss': []}
+            param_data[param]['values'].append(result['value'])
+            param_data[param]['total_loss'].append(result['total_loss'])
+            param_data[param]['data_loss'].append(result['data_loss'])
+            param_data[param]['physics_loss'].append(result['physics_loss'])
+        
+        # Create plot
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        # Plot for each parameter
+        colors = ['blue', 'red', 'green', 'orange', 'purple']
+        loss_types = ['total_loss', 'data_loss', 'physics_loss']
+        
+        for i, (param, data) in enumerate(param_data.items()):
+            color = colors[i % len(colors)]
+            # Normalize parameter values to [0, 1] for plotting
+            param_values = np.array(data['values'])
+            if param_values.max() != param_values.min():
+                normalized_values = (param_values - param_values.min()) / (param_values.max() - param_values.min())
+            else:
+                normalized_values = np.zeros_like(param_values)
+            
+            # Plot each loss type
+            for j, loss_type in enumerate(loss_types):
+                loss_values = np.array(data[loss_type])
+                # Normalize loss values to [0, 1] for plotting
+                if not np.isnan(loss_values).all() and loss_values.max() != loss_values.min():
+                    normalized_loss = (loss_values - loss_values.min()) / (loss_values.max() - loss_values.min())
+                else:
+                    normalized_loss = np.zeros_like(loss_values)
+                
+                ax.plot(normalized_values, normalized_loss, 
+                       label=f'{param} - {loss_type}', 
+                       color=color, 
+                       linestyle=['-', '--', ':'][j % 3],
+                       alpha=0.7)
+        
+        ax.set_xlabel('Normalized Parameter Value')
+        ax.set_ylabel('Normalized Loss Value')
+        ax.set_title(f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}')
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+        
+        # Save plot
+        plot_file_path = os.path.join(output_dir, f"loss_landscape_{checkpoint_info['phase']}_{checkpoint_info['epoch']}.pdf")
+        plt.tight_layout()
+        plt.savefig(plot_file_path, format='pdf', bbox_inches='tight')
+        plt.close()
+        
+        logger.info(f"Loss landscape plot saved to: {plot_file_path}")
 
     def generate_loss_landscape(self, t_tensor: torch.Tensor, collocation_points: torch.Tensor, 
                                checkpoint_info: dict):
@@ -473,7 +549,7 @@ class PINNTrainer:
                 writer.writeheader()
             
             # Adam phase
-            adam_checkpoint_interval = max(1, adam_epochs // 10)  # Every 10% of training
+            adam_checkpoint_interval = max(1, adam_epochs // 4)  # Every 25% of training
             for epoch in range(adam_epochs):
                 optimizer_adam.zero_grad()
                 total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, self.data, collocation_points)
@@ -541,7 +617,7 @@ class PINNTrainer:
 
             # L-BFGS phase with iteration tracking
             lbfgs_iteration = [0]  # Use list to make it mutable in closure
-            lbfgs_checkpoint_interval = max(1, lbfgs_max_iter // 10)  # Every 10% of training
+            lbfgs_checkpoint_interval = max(1, lbfgs_max_iter // 4)  # Every 25% of training
             
             def closure():
                 optimizer_lbfgs.zero_grad()

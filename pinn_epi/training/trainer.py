@@ -84,6 +84,27 @@ class PINNTrainer:
                 raise ValueError(f"Parameter '{param_name}' marked as learnable but not found in model parameters. "
                                  f"Available parameters: {list(self.physics_model.parameters.keys())}")
 
+    @staticmethod
+    def _as_scalar_float(value: Any) -> float:
+        """Convert a scalar-like parameter value to float, preserving NaN for invalid values."""
+        if isinstance(value, torch.Tensor):
+            if value.numel() == 0:
+                return float('nan')
+            if value.numel() == 1:
+                return float(value.detach().cpu().item())
+            return float(value.detach().cpu().reshape(-1)[0])
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            try:
+                array = np.asarray(value)
+                if array.size == 0:
+                    return float('nan')
+                return float(array.reshape(-1)[0])
+            except (TypeError, ValueError, IndexError):
+                return float('nan')
+
     def sample_collocation_points(self, t_range: Tuple[float, float], n_points: int) -> torch.Tensor:
         """Sample collocation points for physics loss evaluation.
         
@@ -199,6 +220,9 @@ class PINNTrainer:
         
         # Get the original parameter tensor (could be learnable or fixed)
         param_tensor = self.physics_model.parameters[param_name]
+
+        # Capture the full compartmental parameter set for each CSV row.
+        all_param_names = list(self.physics_model.parameters.keys())
         
         # Results storage
         results = []
@@ -214,28 +238,34 @@ class PINNTrainer:
             # Compute loss
             try:
                 total_loss, data_loss, physics_loss = self.compute_loss(t_data, self.data, collocation_points)
-                results.append({
+                row = {
                     'parameter': param_name,
-                    'value': val,
+                    'value': float(val),
                     'total_loss': total_loss.item(),
                     'data_loss': data_loss.item(),
                     'physics_loss': physics_loss.item(),
                     'is_current': abs(val - current_param_value) < 1e-8,
                     'phase': checkpoint_info['phase'],
                     'epoch': checkpoint_info['epoch']
-                })
+                }
+                for pname in all_param_names:
+                    row[pname] = self._as_scalar_float(self.physics_model.parameters.get(pname))
+                results.append(row)
             except Exception as e:
                 logger.warning(f"Failed to compute loss for {param_name}={val}: {e}")
-                results.append({
+                row = {
                     'parameter': param_name,
-                    'value': val,
+                    'value': float(val),
                     'total_loss': float('nan'),
                     'data_loss': float('nan'),
                     'physics_loss': float('nan'),
                     'is_current': abs(val - current_param_value) < 1e-8,
                     'phase': checkpoint_info['phase'],
                     'epoch': checkpoint_info['epoch']
-                })
+                }
+                for pname in all_param_names:
+                    row[pname] = self._as_scalar_float(self.physics_model.parameters.get(pname))
+                results.append(row)
         
         # Restore original parameter value
         if isinstance(param_tensor, nn.Parameter):
@@ -266,13 +296,50 @@ class PINNTrainer:
         # Save CSV file
         csv_file_path = os.path.join(loss_landscape_dir, f"loss_landscape_{checkpoint_info['phase']}_{checkpoint_info['epoch']}.csv")
         
-        fieldnames = ['parameter', 'value', 'total_loss', 'data_loss', 'physics_loss', 'is_current', 'phase', 'epoch']
+        reserved_columns = {
+            'total_loss',
+            'data_loss',
+            'physics_loss',
+            'parameter',
+            'value',
+            'is_current',
+            'phase',
+            'epoch',
+        }
+
+        parameter_names = [
+            name for name in self.physics_model.parameters.keys()
+            if name not in reserved_columns
+        ]
+
+        if not parameter_names:
+            parameter_names = [
+                name for name in dict.fromkeys([
+                    result['parameter'] for result in results if 'parameter' in result
+                ])
+                if name not in reserved_columns
+            ]
+
+        fieldnames = (
+            parameter_names
+            + [
+                'total_loss',
+                'data_loss',
+                'physics_loss',
+                'parameter',
+                'value',
+                'is_current',
+                'phase',
+                'epoch',
+            ]
+        )
         
         with open(csv_file_path, 'w', newline='') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for result in results:
-                writer.writerow(result)
+                row = {field: result.get(field, float('nan')) for field in fieldnames}
+                writer.writerow(row)
                 
         logger.info(f"Loss landscape saved to: {csv_file_path}")
         
@@ -282,9 +349,10 @@ class PINNTrainer:
     def plot_loss_landscape(self, results: list, checkpoint_info: dict, output_dir: str):
         """Generate matplotlib PDF plot with parallel coordinates for loss landscape.
 
-        Each unique value in the "parameter" column is drawn as its own vertical
-        axis. Parameter values and loss values are shown on independent per-axis
-        scales with raw tick labels rather than being globally normalized.
+        Each compartmental parameter becomes its own vertical axis. For a model
+        like SIR, the axes include `beta` and `gamma`, so each row represents an
+        n-order parameter set. Loss axes are shown with raw per-axis scales and
+        raw tick labels.
 
         Args:
             results: List of dictionaries containing loss landscape data
@@ -305,44 +373,61 @@ class PINNTrainer:
                     finite_values.append(numeric_value)
             return finite_values
 
-        # Each unique parameter name becomes its own vertical axis.
-        param_names = list(dict.fromkeys([result['parameter'] for result in results]))
+        reserved_columns = {
+            'total_loss',
+            'data_loss',
+            'physics_loss',
+            'parameter',
+            'value',
+            'is_current',
+            'phase',
+            'epoch',
+        }
+
+        parameter_names = [
+            name for name in self.physics_model.parameters.keys()
+            if name not in reserved_columns
+        ]
+
+        if not parameter_names:
+            parameter_names = [
+                name for name in dict.fromkeys([
+                    result.get('parameter') for result in results if result.get('parameter')
+                ])
+                if name not in reserved_columns
+            ]
+
         loss_keys = ['total_loss', 'data_loss', 'physics_loss']
         loss_labels = ['Total Loss', 'Data Loss', 'Physics Loss']
+        loss_key_by_label = {label: key for label, key in zip(loss_labels, loss_keys)}
 
-        dimensions = param_names + loss_labels
+        dimensions = parameter_names + loss_labels
         n_dims = len(dimensions)
-        n_param_axes = len(param_names)
+        n_param_axes = len(parameter_names)
         x_positions = np.arange(n_dims)
+
+        def get_axis_value(axis_label: str, result: dict):
+            if axis_label in parameter_names:
+                if axis_label in result:
+                    return result[axis_label]
+                if result.get('parameter') == axis_label:
+                    return result.get('value')
+                return None
+
+            return result.get(loss_key_by_label[axis_label])
 
         # Compute independent raw ranges for every axis.
         axis_ranges = {}
-
-        for param_name in param_names:
-            vals = _finite([
-                result['value']
-                for result in results
-                if result['parameter'] == param_name
-            ])
+        for axis_label in dimensions:
+            vals = _finite([get_axis_value(axis_label, result) for result in results])
             if vals:
                 lo, hi = min(vals), max(vals)
                 if lo == hi:
                     lo -= 0.5
                     hi += 0.5
-                axis_ranges[param_name] = (lo, hi)
+                axis_ranges[axis_label] = (lo, hi)
             else:
-                axis_ranges[param_name] = (0.0, 1.0)
-
-        for key, label in zip(loss_keys, loss_labels):
-            vals = _finite([result[key] for result in results])
-            if vals:
-                lo, hi = min(vals), max(vals)
-                if lo == hi:
-                    lo -= 0.5
-                    hi += 0.5
-                axis_ranges[label] = (lo, hi)
-            else:
-                axis_ranges[label] = (0.0, 1.0)
+                axis_ranges[axis_label] = (0.0, 1.0)
 
         def value_to_y(axis_label, value):
             lo, hi = axis_ranges[axis_label]
@@ -362,7 +447,13 @@ class PINNTrainer:
             ax.text(i, 1.03, dim, ha='center', va='bottom', fontsize=11, fontweight='bold')
 
         # Add raw-value tick labels to each axis.
-        n_ticks = 3 if n_dims > 6 else 5
+        if n_dims > 10:
+            n_ticks = 2
+        elif n_dims > 6:
+            n_ticks = 3
+        else:
+            n_ticks = 5
+
         for i, axis_label in enumerate(dimensions):
             lo, hi = axis_ranges[axis_label]
             for t in range(n_ticks):
@@ -378,80 +469,78 @@ class PINNTrainer:
                     color='gray'
                 )
 
-        # Color mapping for parameters.
-        colors = plt.cm.tab10(np.linspace(0, 1, max(n_param_axes, 1)))
-        param_color_map = {name: colors[idx] for idx, name in enumerate(param_names)}
-        param_index_map = {name: idx for idx, name in enumerate(param_names)}
-
-        # Loss axes are always after the parameter axes.
-        loss_x_indices = list(range(n_param_axes, n_dims))
+        # Color mapping for swept parameters.
+        colors = plt.cm.tab20(np.linspace(0, 1, max(n_param_axes, 1)))
+        param_color_map = {name: colors[idx] for idx, name in enumerate(parameter_names)}
 
         # Draw lines for each result.
         for result in results:
-            param = result['parameter']
-            if param not in param_color_map:
+            ys = []
+            valid = True
+
+            for axis_label in dimensions:
+                val = get_axis_value(axis_label, result)
+                if val is None:
+                    valid = False
+                    break
+
+                try:
+                    numeric_value = float(val)
+                except (TypeError, ValueError):
+                    valid = False
+                    break
+
+                if not np.isfinite(numeric_value):
+                    valid = False
+                    break
+
+                ys.append(value_to_y(axis_label, numeric_value))
+
+            if not valid:
                 continue
 
-            numeric_values = _finite([
-                result['value'],
-                result['total_loss'],
-                result['data_loss'],
-                result['physics_loss']
-            ])
-            if len(numeric_values) != 4:
-                continue
-
-            color = param_color_map[param]
-            param_idx = param_index_map[param]
-
-            y_param = value_to_y(param, result['value'])
-            y_total = value_to_y(loss_labels[0], result['total_loss'])
-            y_data = value_to_y(loss_labels[1], result['data_loss'])
-            y_physics = value_to_y(loss_labels[2], result['physics_loss'])
-
-            line_x = [param_idx] + loss_x_indices
-            line_y = [y_param, y_total, y_data, y_physics]
-
-            ax.plot(line_x, line_y, color=color, alpha=0.3, linewidth=1, zorder=2)
+            color = param_color_map.get(result.get('parameter'), 'gray')
+            ax.plot(x_positions, ys, color=color, alpha=0.3, linewidth=1, zorder=2)
 
         # Highlight current parameter values.
         for result in results:
             if not result.get('is_current', False):
                 continue
 
-            param = result['parameter']
-            if param not in param_color_map:
+            ys = []
+            valid = True
+
+            for axis_label in dimensions:
+                val = get_axis_value(axis_label, result)
+                if val is None:
+                    valid = False
+                    break
+
+                try:
+                    numeric_value = float(val)
+                except (TypeError, ValueError):
+                    valid = False
+                    break
+
+                if not np.isfinite(numeric_value):
+                    valid = False
+                    break
+
+                ys.append(value_to_y(axis_label, numeric_value))
+
+            if not valid:
                 continue
 
-            numeric_values = _finite([
-                result['value'],
-                result['total_loss'],
-                result['data_loss'],
-                result['physics_loss']
-            ])
-            if len(numeric_values) != 4:
-                continue
-
-            color = param_color_map[param]
-            param_idx = param_index_map[param]
-
-            y_param = value_to_y(param, result['value'])
-            y_total = value_to_y(loss_labels[0], result['total_loss'])
-            y_data = value_to_y(loss_labels[1], result['data_loss'])
-            y_physics = value_to_y(loss_labels[2], result['physics_loss'])
-
-            line_x = [param_idx] + loss_x_indices
-            line_y = [y_param, y_total, y_data, y_physics]
-
+            color = param_color_map.get(result.get('parameter'), 'gray')
             ax.plot(
-                line_x,
-                line_y,
+                x_positions,
+                ys,
                 color=color,
                 linewidth=3,
                 marker='o',
                 markersize=6,
                 zorder=3,
-                label=f'{param} (current)'
+                label=f"{result.get('parameter', 'current')} (current)"
             )
 
         # Set plot limits and appearance.

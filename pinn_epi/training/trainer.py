@@ -192,7 +192,9 @@ class PINNTrainer:
             checkpoint_info: Dictionary with phase and epoch information
         """
         # Store original parameter value
-        original_value = self.physics_model.parameters[param_name].clone()
+        original_value = self.physics_model.parameters[param_name]
+        if isinstance(original_value, torch.Tensor):
+            original_value = original_value.clone()
         
         # Get the original parameter tensor (could be learnable or fixed)
         param_tensor = self.physics_model.parameters[param_name]
@@ -236,7 +238,10 @@ class PINNTrainer:
         
         # Restore original parameter value
         if isinstance(param_tensor, nn.Parameter):
-            param_tensor.data.fill_(original_value)
+            if isinstance(original_value, torch.Tensor):
+                param_tensor.data.copy_(original_value.data)
+            else:
+                param_tensor.data.fill_(original_value)
         else:
             self.physics_model.parameters[param_name] = original_value
             

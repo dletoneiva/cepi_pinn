@@ -51,6 +51,9 @@ COMPARTMENT_COLORS = {
     'B': '#B3DE69',  # Light green
 }
 
+# Color order for parameter grid sweeps (uses compartment palette order)
+PARAMETER_GRID_COLORS = list(COMPARTMENT_COLORS.values())
+
 # Universal color for sum of compartments plot
 SUM_COLOR = 'black'
 

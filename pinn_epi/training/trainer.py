@@ -62,6 +62,24 @@ if not isinstance(_CONSTANT_PARAMETER_GREEK_MAP, dict):
 if not isinstance(_CONSTANT_PHYSICS_EQUATION_LATEX, dict):
     _CONSTANT_PHYSICS_EQUATION_LATEX = {}
 
+_CONSTANT_COMPARTMENT_COLORS = getattr(
+    _constants_module,
+    "COMPARTMENT_COLORS",
+    {},
+) if _constants_module is not None else {}
+
+if not isinstance(_CONSTANT_COMPARTMENT_COLORS, dict):
+    _CONSTANT_COMPARTMENT_COLORS = {}
+
+_CONSTANT_PARAMETER_GRID_COLORS = getattr(
+    _constants_module,
+    "PARAMETER_GRID_COLORS",
+    None,
+) if _constants_module is not None else None
+
+if not isinstance(_CONSTANT_PARAMETER_GRID_COLORS, (list, tuple)):
+    _CONSTANT_PARAMETER_GRID_COLORS = list(_CONSTANT_COMPARTMENT_COLORS.values())
+
 
 _DEFAULT_PARAMETER_GREEK_MAP = {
     "alpha": r"\alpha",
@@ -206,6 +224,25 @@ PHYSICS_EQUATION_LATEX = {
     **_CONSTANT_PHYSICS_EQUATION_LATEX,
 }
 
+_PARAMETER_GRID_COLORS = list(_CONSTANT_PARAMETER_GRID_COLORS) if _CONSTANT_PARAMETER_GRID_COLORS else []
+
+if not _PARAMETER_GRID_COLORS:
+    _PARAMETER_GRID_COLORS = [
+        "#377EB8",
+        "#E41A1C",
+        "#4DAF4A",
+        "#984EA3",
+        "#A65628",
+        "#FF7F00",
+        "#FFFF33",
+        "#F781BF",
+        "#999999",
+        "#8DD3C7",
+        "#BEBADA",
+        "#FDB462",
+        "#B3DE69",
+    ]
+
 
 class PINNTrainer:
     """Trainer for Physics-Informed Neural Networks (PINNs) in epidemiological modeling.
@@ -247,6 +284,7 @@ class PINNTrainer:
 
     _PARAMETER_GREEK_MAP = PARAMETER_GREEK_MAP
     _PHYSICS_EQUATION_LATEX = PHYSICS_EQUATION_LATEX
+    _PARAMETER_GRID_COLORS = _PARAMETER_GRID_COLORS
 
     _HIGH_CONSPICUITY_PALETTE = [
         "#FF3B30",
@@ -1107,13 +1145,21 @@ class PINNTrainer:
         })
 
     def _get_sweep_colors(self, n_colors: int) -> list:
-        """Return a high-contrast palette for loss-landscape sweep lines."""
+        """Return parameter-grid colors in the same order as constants."""
         if n_colors <= 0:
             return []
 
-        palette = list(self._HIGH_CONSPICUITY_PALETTE)
-        if n_colors <= len(palette):
-            return palette[:n_colors]
+        base_palette = list(self._PARAMETER_GRID_COLORS)
+        if not base_palette:
+            base_palette = list(self._HIGH_CONSPICUITY_PALETTE)
+
+        extended_palette = base_palette + [
+            color for color in self._HIGH_CONSPICUITY_PALETTE
+            if color not in base_palette
+        ]
+
+        if n_colors <= len(extended_palette):
+            return extended_palette[:n_colors]
 
         try:
             cmap = plt.colormaps["hsv"]
@@ -1192,10 +1238,17 @@ class PINNTrainer:
                 if axis_label in global_axis_ranges:
                     axis_ranges[axis_label] = global_axis_ranges[axis_label]
 
+        use_log_axis = {}
+        for axis_label in dimensions:
+            lo, hi = axis_ranges[axis_label]
+            use_log_axis[axis_label] = bool(
+                axis_label in loss_labels_set and lo > 0 and hi > 0 and hi != lo
+            )
+
         def value_to_y(axis_label: str, value: float) -> float:
             lo, hi = axis_ranges[axis_label]
 
-            if axis_label in loss_labels_set and lo > 0 and hi > 0 and hi != lo:
+            if use_log_axis.get(axis_label, False):
                 if value <= 0:
                     return 0.0
 
@@ -1235,9 +1288,16 @@ class PINNTrainer:
         for i in range(n_dims):
             ax.plot([i, i], [0, 1], color='black', linewidth=1.5, zorder=1)
 
+        # Draw small bottom ticks for each dimension axis.
+        for i in x_positions:
+            ax.plot([i, i], [-0.012, 0.0], color='black', linewidth=1.0, zorder=1)
+
         # Axis labels on top with a blank background so they stand out.
         for i, dim in enumerate(dimensions):
             display_label = self._get_axis_display_label(dim)
+            if use_log_axis.get(dim, False):
+                display_label = f"{display_label} (log₁₀)"
+
             ax.text(
                 i,
                 1.04,
@@ -1268,18 +1328,12 @@ class PINNTrainer:
             lo, hi = axis_ranges[axis_label]
             current_value = current_values.get(axis_label)
             tick_fracs = []
-
-            use_log_ticks = (
-                axis_label in loss_labels_set
-                and lo > 0
-                and hi > 0
-                and hi != lo
-            )
+            is_log_axis = use_log_axis.get(axis_label, False)
 
             for t in range(n_ticks):
                 frac = t / (n_ticks - 1) if n_ticks > 1 else 0.5
 
-                if use_log_ticks:
+                if is_log_axis:
                     log_lo = np.log10(lo)
                     log_hi = np.log10(hi)
                     val = float(10 ** (log_lo + frac * (log_hi - log_lo)))
@@ -1287,6 +1341,16 @@ class PINNTrainer:
                     val = lo + frac * (hi - lo)
 
                 tick_fracs.append(frac)
+
+                # Draw a tick mark on this axis.
+                ax.plot(
+                    [i - 0.012, i + 0.012],
+                    [frac, frac],
+                    color='black',
+                    linewidth=1.0,
+                    zorder=1.5,
+                )
+
                 ax.text(
                     i - 0.03,
                     frac,
@@ -1301,19 +1365,29 @@ class PINNTrainer:
 
             if current_value is not None:
                 current_y = value_to_y(axis_label, current_value)
-                if 0.0 <= current_y <= 1.0 and not any(abs(current_y - frac) < 0.02 for frac in tick_fracs):
-                    ax.text(
-                        i - 0.03,
-                        current_y,
-                        f'{current_value:.4g}',
-                        ha='right',
-                        va='center',
-                        fontsize=current_tick_fontsize,
-                        fontweight='bold',
-                        color='darkred',
-                        zorder=5,
-                        bbox=dict(facecolor='white', edgecolor='none', pad=1.0),
+                if 0.0 <= current_y <= 1.0:
+                    # Draw a distinct current-value tick mark on every axis.
+                    ax.plot(
+                        [i - 0.022, i + 0.022],
+                        [current_y, current_y],
+                        color='black',
+                        linewidth=2.0,
+                        zorder=1.6,
                     )
+
+                    if not any(abs(current_y - frac) < 0.02 for frac in tick_fracs):
+                        ax.text(
+                            i - 0.03,
+                            current_y,
+                            f'{current_value:.4g}',
+                            ha='right',
+                            va='center',
+                            fontsize=current_tick_fontsize,
+                            fontweight='bold',
+                            color='darkred',
+                            zorder=5,
+                            bbox=dict(facecolor='white', edgecolor='none', pad=1.0),
+                        )
 
         # High-contrast color mapping for swept parameters.
         colors = self._get_sweep_colors(max(n_param_axes, 1))

@@ -130,7 +130,8 @@ _DEFAULT_PARAMETER_GREEK_MAP = {
 # Matplotlib's mathtext parser does NOT support LaTeX environments such as
 # \begin{array}{l} ... \end{array}. Each equation is therefore stored as a list
 # of single-line mathtext expressions (no surrounding $ delimiters). They are
-# rendered as a compact inline block using \substack, with at most three lines.
+# rendered as a compact stacked block using \substack and wrapped in a box.
+# The full set of equations is always shown (no truncation).
 _DEFAULT_PHYSICS_EQUATION_LATEX = {
     "SI": [
         r"\frac{dS}{dt} = -\beta S I",
@@ -408,12 +409,13 @@ class PINNTrainer:
 
         return self._get_parameter_display_label(axis_label)
 
-    def _get_physics_equation_latex(self) -> str:
-        """Return a compact inline mathtext equation for the current physics model.
+    def _get_physics_equation_lines(self) -> list:
+        """Return the physics model's ODE equations as a list of mathtext lines.
 
-        The result is a single ``$...$`` block. Multi-line equations are rendered
-        with ``\\substack`` and are capped at three visual lines. If the model has
-        more than three equations, the third line is marked with ``\\ldots``.
+        The lookup mirrors the previous behaviour (model class name, config
+        ``model_type``, model-provided attributes, then a prefix fallback). The
+        equations are returned in full; no truncation is applied so that every
+        compartment equation is rendered inside the boxed block.
         """
         model_name = type(self.physics_model).__name__
         normalized_model_name = model_name.replace("Model", "").upper()
@@ -462,18 +464,23 @@ class PINNTrainer:
                     raw = self._PHYSICS_EQUATION_LATEX[key]
                     break
 
-        lines = self._normalize_equation_lines(raw)
+        return self._normalize_equation_lines(raw)
+
+    @staticmethod
+    def _format_equation_block(lines: list) -> str:
+        """Format equation lines into a single mathtext block for display.
+
+        A single line is returned as ``$...$``; multiple lines are wrapped in a
+        ``\\substack`` so they render as a compact stacked block (suitable for
+        drawing inside a box). No truncation is performed.
+        """
         if not lines:
             return ""
-
-        if len(lines) > 3:
-            lines = lines[:3]
-            lines[-1] = f"{lines[-1]} \\ldots"
 
         if len(lines) == 1:
             return f"${lines[0]}$"
 
-        return "$" + r"\substack{" + r" \\ ".join(lines) + r"}" + "$"
+        return r"$\substack{" + r" \\ ".join(lines) + r"}$"
 
     def _get_parameter_names(self) -> list:
         """Return ordered compartmental parameter names suitable for CSV/plot axes.
@@ -1016,18 +1023,33 @@ class PINNTrainer:
             spine.set_visible(False)
 
         title = f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}'
-        equation = self._get_physics_equation_latex()
+        equation_lines = self._get_physics_equation_lines()
 
-        if equation:
-            ax.set_title(
-                f'{title}\n{equation}',
-                fontsize=12
+        if equation_lines:
+            # Render the full system of equations as a boxed block placed just
+            # below the subplot title. The title is pushed up by a pad sized to
+            # clear the box so the two never overlap and nothing is truncated.
+            equation_text = self._format_equation_block(equation_lines)
+            title_pad = 18 + len(equation_lines) * 18
+            ax.set_title(title, fontsize=12, pad=title_pad)
+            ax.text(
+                0.5,
+                1.02,
+                equation_text,
+                transform=ax.transAxes,
+                ha='center',
+                va='bottom',
+                fontsize=12,
+                zorder=5,
+                bbox=dict(
+                    boxstyle='round,pad=0.4',
+                    facecolor='white',
+                    edgecolor='black',
+                    alpha=0.9,
+                ),
             )
         else:
-            ax.set_title(
-                title,
-                fontsize=12
-            )
+            ax.set_title(title, fontsize=12)
 
     def generate_loss_landscape(self, t_tensor: torch.Tensor, collocation_points: torch.Tensor, 
                                checkpoint_info: dict):

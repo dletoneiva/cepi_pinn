@@ -15,9 +15,210 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from pinn_epi.utils.device_utils import DEVICE  # Import the centralized device
+import importlib
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+
+# Try to reuse project-level constants if available. If not, fall back to
+# local defaults so the trainer still renders Greek labels and equations.
+_constants_module = None
+for _module_name in (
+    "pinn_epi.constants",
+    "pinn_epi.configs.constants",
+    "pinn_epi.utils.constants",
+):
+    try:
+        _constants_module = importlib.import_module(_module_name)
+        break
+    except Exception:
+        continue
+
+if _constants_module is not None:
+    _CONSTANT_PARAMETER_GREEK_MAP = getattr(
+        _constants_module,
+        "PARAMETER_GREEK_MAP",
+        getattr(_constants_module, "GREEK_PARAMETER_MAP", {}),
+    )
+    _CONSTANT_PHYSICS_EQUATION_LATEX = getattr(
+        _constants_module,
+        "PHYSICS_EQUATION_LATEX",
+        getattr(
+            _constants_module,
+            "MODEL_EQUATIONS_LATEX",
+            getattr(_constants_module, "PHYSICS_EQUATIONS_LATEX", {}),
+        ),
+    )
+else:
+    _CONSTANT_PARAMETER_GREEK_MAP = {}
+    _CONSTANT_PHYSICS_EQUATION_LATEX = {}
+
+if not isinstance(_CONSTANT_PARAMETER_GREEK_MAP, dict):
+    _CONSTANT_PARAMETER_GREEK_MAP = {}
+
+if not isinstance(_CONSTANT_PHYSICS_EQUATION_LATEX, dict):
+    _CONSTANT_PHYSICS_EQUATION_LATEX = {}
+
+
+_DEFAULT_PARAMETER_GREEK_MAP = {
+    "alpha": r"\alpha",
+    "beta": r"\beta",
+    "gamma": r"\gamma",
+    "delta": r"\delta",
+    "epsilon": r"\epsilon",
+    "zeta": r"\zeta",
+    "eta": r"\eta",
+    "theta": r"\theta",
+    "iota": r"\iota",
+    "kappa": r"\kappa",
+    "lambda": r"\lambda",
+    "mu": r"\mu",
+    "nu": r"\nu",
+    "xi": r"\xi",
+    "pi": r"\pi",
+    "rho": r"\rho",
+    "sigma": r"\sigma",
+    "tau": r"\tau",
+    "upsilon": r"\upsilon",
+    "phi": r"\phi",
+    "chi": r"\chi",
+    "psi": r"\psi",
+    "omega": r"\omega",
+    "v": r"\upsilon",
+    "vaccination": r"\upsilon",
+    "vaccination_rate": r"\upsilon",
+    "vaccine": r"\upsilon",
+    "vaccine_rate": r"\upsilon",
+    "vax": r"\upsilon",
+    "vax_rate": r"\upsilon",
+    "waning": r"\nu",
+    "waning_rate": r"\nu",
+    "immunity_loss": r"\nu",
+    "immunity_loss_rate": r"\nu",
+    "exposure": r"\sigma",
+    "exposure_rate": r"\sigma",
+    "incubation": r"\sigma",
+    "incubation_rate": r"\sigma",
+    "latent": r"\sigma",
+    "latent_rate": r"\sigma",
+    "recovery": r"\gamma",
+    "recovery_rate": r"\gamma",
+    "death": r"\delta",
+    "death_rate": r"\delta",
+    "mortality": r"\delta",
+    "mortality_rate": r"\delta",
+    "fatality": r"\delta",
+    "fatality_rate": r"\delta",
+    "birth": r"\mu",
+    "birth_rate": r"\mu",
+    "natural_death": r"\mu",
+    "natural_death_rate": r"\mu",
+    "population_death": r"\mu",
+    "population_death_rate": r"\mu",
+    "transmission": r"\beta",
+    "transmission_rate": r"\beta",
+    "contact": r"\beta",
+    "contact_rate": r"\beta",
+    "infection": r"\beta",
+    "infection_rate": r"\beta",
+    "vaccine_efficacy": r"\epsilon",
+    "efficacy": r"\epsilon",
+}
+
+_DEFAULT_PHYSICS_EQUATION_LATEX = {
+    "SI": (
+        r"$\begin{array}{l} "
+        r"\frac{dS}{dt} = -\beta S I \\ "
+        r"\frac{dI}{dt} = \beta S I "
+        r"\end{array}$"
+    ),
+    "SIR": (
+        r"$\begin{array}{l} "
+        r"\frac{dS}{dt} = -\beta S I \\ "
+        r"\frac{dI}{dt} = \beta S I - \gamma I \\ "
+        r"\frac{dR}{dt} = \gamma I "
+        r"\end{array}$"
+    ),
+    "SIS": (
+        r"$\begin{array}{l} "
+        r"\frac{dS}{dt} = -\beta S I + \gamma I \\ "
+        r"\frac{dI}{dt} = \beta S I - \gamma I "
+        r"\end{array}$"
+    ),
+    "SEIR": (
+        r"$\begin{array}{l} "
+        r"\frac{dS}{dt} = -\beta S I \\ "
+        r"\frac{dE}{dt} = \beta S I - \sigma E \\ "
+        r"\frac{dI}{dt} = \sigma E - \gamma I \\ "
+        r"\frac{dR}{dt} = \gamma I "
+        r"\end{array}$"
+    ),
+    "SIRD": (
+        r"$\begin{array}{l} "
+        r"\frac{dS}{dt} = -\beta S I \\ "
+        r"\frac{dI}{dt} = \beta S I - \gamma I - \delta I \\ "
+        r"\frac{dR}{dt} = \gamma I \\ "
+        r"\frac{dD}{dt} = \delta I "
+        r"\end{array}$"
+    ),
+    "SIRV": (
+        r"$\begin{array}{l} "
+        r"\frac{dS}{dt} = -\beta S I - \upsilon S \\ "
+        r"\frac{dI}{dt} = \beta S I - \gamma I \\ "
+        r"\frac{dR}{dt} = \gamma I \\ "
+        r"\frac{dV}{dt} = \upsilon S "
+        r"\end{array}$"
+    ),
+    "SIRDV": (
+        r"$\begin{array}{l} "
+        r"\frac{dS}{dt} = -\beta S I - \upsilon S \\ "
+        r"\frac{dI}{dt} = \beta S I - \gamma I - \delta I \\ "
+        r"\frac{dR}{dt} = \gamma I \\ "
+        r"\frac{dD}{dt} = \delta I \\ "
+        r"\frac{dV}{dt} = \upsilon S "
+        r"\end{array}$"
+    ),
+    "SEIRD": (
+        r"$\begin{array}{l} "
+        r"\frac{dS}{dt} = -\beta S I \\ "
+        r"\frac{dE}{dt} = \beta S I - \sigma E \\ "
+        r"\frac{dI}{dt} = \sigma E - \gamma I - \delta I \\ "
+        r"\frac{dR}{dt} = \gamma I \\ "
+        r"\frac{dD}{dt} = \delta I "
+        r"\end{array}$"
+    ),
+    "SEIRV": (
+        r"$\begin{array}{l} "
+        r"\frac{dS}{dt} = -\beta S I - \upsilon S \\ "
+        r"\frac{dE}{dt} = \beta S I - \sigma E \\ "
+        r"\frac{dI}{dt} = \sigma E - \gamma I \\ "
+        r"\frac{dR}{dt} = \gamma I \\ "
+        r"\frac{dV}{dt} = \upsilon S "
+        r"\end{array}$"
+    ),
+    "SEIRDV": (
+        r"$\begin{array}{l} "
+        r"\frac{dS}{dt} = -\beta S I - \upsilon S \\ "
+        r"\frac{dE}{dt} = \beta S I - \sigma E \\ "
+        r"\frac{dI}{dt} = \sigma E - \gamma I - \delta I \\ "
+        r"\frac{dR}{dt} = \gamma I \\ "
+        r"\frac{dD}{dt} = \delta I \\ "
+        r"\frac{dV}{dt} = \upsilon S "
+        r"\end{array}$"
+    ),
+}
+
+PARAMETER_GREEK_MAP = {
+    **_DEFAULT_PARAMETER_GREEK_MAP,
+    **_CONSTANT_PARAMETER_GREEK_MAP,
+}
+
+PHYSICS_EQUATION_LATEX = {
+    **_DEFAULT_PHYSICS_EQUATION_LATEX,
+    **_CONSTANT_PHYSICS_EQUATION_LATEX,
+}
+
 
 class PINNTrainer:
     """Trainer for Physics-Informed Neural Networks (PINNs) in epidemiological modeling.
@@ -54,6 +255,11 @@ class PINNTrainer:
         'phase',
         'epoch',
     })
+
+    _LOSS_LABELS = ("Physics Loss", "Data Loss", "Total Loss")
+
+    _PARAMETER_GREEK_MAP = PARAMETER_GREEK_MAP
+    _PHYSICS_EQUATION_LATEX = PHYSICS_EQUATION_LATEX
 
     def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict):
         """Initialize the PINN trainer with model, physics constraints, and training data.
@@ -124,6 +330,117 @@ class PINNTrainer:
                 return float(array.reshape(-1)[0])
             except (TypeError, ValueError, IndexError):
                 return float('nan')
+
+    @staticmethod
+    def _coerce_latex_value(value: Any) -> str:
+        """Coerce a LaTeX-like value into a single string."""
+        if value is None:
+            return ""
+
+        if isinstance(value, (list, tuple)):
+            lines = []
+            for line in value:
+                text = str(line).strip()
+                if text.startswith("$") and text.endswith("$"):
+                    text = text[1:-1].strip()
+                if text:
+                    lines.append(text)
+            if not lines:
+                return ""
+            return r"\begin{array}{l} " + r" \\ ".join(lines) + r" \end{array}"
+
+        return str(value)
+
+    @staticmethod
+    def _ensure_math_delimiters(value: Any) -> str:
+        """Ensure a LaTeX string is wrapped in mathtext delimiters."""
+        text = PINNTrainer._coerce_latex_value(value).strip()
+        if not text:
+            return ""
+
+        if text.startswith("$") and text.endswith("$"):
+            return text
+
+        if text.startswith("$"):
+            return text + "$"
+
+        if text.endswith("$"):
+            return "$" + text
+
+        return f"${text}$"
+
+    def _get_parameter_display_label(self, name: str) -> str:
+        """Return a display label for a parameter, using Greek letters when known."""
+        key = str(name).lower()
+
+        symbol = self._PARAMETER_GREEK_MAP.get(key)
+        if symbol is None:
+            for token in key.split("_"):
+                if token in self._PARAMETER_GREEK_MAP:
+                    symbol = self._PARAMETER_GREEK_MAP[token]
+                    break
+
+        if symbol is None:
+            return str(name)
+
+        text = str(symbol).strip()
+        if not text:
+            return str(name)
+
+        if text.startswith("$") or "\\" in text:
+            return self._ensure_math_delimiters(text)
+
+        return text
+
+    def _get_axis_display_label(self, axis_label: str) -> str:
+        """Return display text for a parallel-coordinate axis label."""
+        if axis_label in self._LOSS_LABELS:
+            return axis_label
+
+        return self._get_parameter_display_label(axis_label)
+
+    def _get_physics_equation_latex(self) -> str:
+        """Return a LaTeX equation for the current physics model, if available."""
+        model_name = type(self.physics_model).__name__
+        normalized_model_name = model_name.replace("Model", "").upper()
+        config_model_type = str(self.config.get("model_type", "")).upper()
+
+        candidate_keys = [
+            model_name,
+            normalized_model_name,
+            config_model_type,
+            str(self.config.get("model_type", "")),
+        ]
+
+        for key in candidate_keys:
+            if not key:
+                continue
+
+            if key in self._PHYSICS_EQUATION_LATEX:
+                return self._ensure_math_delimiters(self._PHYSICS_EQUATION_LATEX[key])
+
+            lower_key = str(key).lower()
+            if lower_key in self._PHYSICS_EQUATION_LATEX:
+                return self._ensure_math_delimiters(self._PHYSICS_EQUATION_LATEX[lower_key])
+
+        getter = getattr(self.physics_model, "get_equation_latex", None)
+        if callable(getter):
+            try:
+                return self._ensure_math_delimiters(getter())
+            except Exception:
+                pass
+
+        for attr in ("equation_latex", "physics_equation_latex"):
+            value = getattr(self.physics_model, attr, None)
+            if value is not None:
+                return self._ensure_math_delimiters(value)
+
+        for key in sorted(self._PHYSICS_EQUATION_LATEX.keys(), key=lambda item: len(str(item)), reverse=True):
+            key_str = str(key)
+            if key_str and key_str.upper() in normalized_model_name:
+                return self._ensure_math_delimiters(self._PHYSICS_EQUATION_LATEX[key])
+
+        return ""
 
     def _get_parameter_names(self) -> list:
         """Return ordered compartmental parameter names suitable for CSV/plot axes.
@@ -490,8 +807,8 @@ class PINNTrainer:
         if not parameter_names:
             parameter_names = self._get_unique_parameter_names_from_results(results)
 
+        loss_labels = list(self._LOSS_LABELS)
         loss_keys = ['physics_loss', 'data_loss', 'total_loss']
-        loss_labels = ['Physics Loss', 'Data Loss', 'Total Loss']
         loss_key_by_label = {label: key for label, key in zip(loss_labels, loss_keys)}
 
         dimensions = parameter_names + loss_labels
@@ -567,10 +884,11 @@ class PINNTrainer:
 
         # Axis labels on top with a blank background so they stand out.
         for i, dim in enumerate(dimensions):
+            display_label = self._get_axis_display_label(dim)
             ax.text(
                 i,
                 1.04,
-                dim,
+                display_label,
                 ha='center',
                 va='bottom',
                 fontsize=11,
@@ -664,10 +982,19 @@ class PINNTrainer:
         for spine in ax.spines.values():
             spine.set_visible(False)
 
-        ax.set_title(
-            f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}',
-            fontsize=12
-        )
+        title = f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}'
+        equation = self._get_physics_equation_latex()
+
+        if equation:
+            ax.set_title(
+                f'{title}\n{equation}',
+                fontsize=12
+            )
+        else:
+            ax.set_title(
+                title,
+                fontsize=12
+            )
 
     def generate_loss_landscape(self, t_tensor: torch.Tensor, collocation_points: torch.Tensor, 
                                checkpoint_info: dict):

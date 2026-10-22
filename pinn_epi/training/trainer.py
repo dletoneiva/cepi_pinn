@@ -338,6 +338,31 @@ class PINNTrainer:
 
         return f"${text}$"
 
+    @staticmethod
+    def _axis_range_from_values(values: list) -> Tuple[float, float]:
+        """Compute a (lo, hi) axis range from a list of possibly-invalid values.
+
+        Ignores non-numeric and non-finite entries. When all valid values are
+        equal (or none exist) the range is widened so the axis stays visible.
+        """
+        finite_values = []
+        for value in values:
+            try:
+                numeric_value = float(value)
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite(numeric_value):
+                finite_values.append(numeric_value)
+
+        if finite_values:
+            lo, hi = min(finite_values), max(finite_values)
+            if lo == hi:
+                lo -= 0.5
+                hi += 0.5
+            return (lo, hi)
+
+        return (0.0, 1.0)
+
     def _normalize_equation_lines(self, value: Any) -> list:
         """Convert an equation value into a list of mathtext lines.
 
@@ -513,6 +538,45 @@ class PINNTrainer:
                 names.append(name)
         return names
 
+    def _get_axis_value(self, axis_label: str, result: dict, parameter_names: list, loss_key_by_label: dict):
+        """Extract the numeric value for a given axis label from a result row."""
+        if axis_label in parameter_names:
+            if axis_label in result:
+                return result[axis_label]
+            if result.get('parameter') == axis_label:
+                return result.get('value')
+            return None
+
+        return result.get(loss_key_by_label[axis_label])
+
+    def _compute_global_axis_ranges(self, rows: list) -> Dict[str, Tuple[float, float]]:
+        """Compute one (lo, hi) range per dimension across ALL loss-landscape rows.
+
+        Using a single global range per dimension (parameter axes and loss axes)
+        guarantees that every subplot on every page shares the same scale. For
+        example, the "Data Loss" axis spans the same min/max in every snapshot,
+        making the plots directly comparable.
+        """
+        parameter_names = self._get_parameter_names()
+        if not parameter_names:
+            parameter_names = self._get_unique_parameter_names_from_results(rows)
+
+        loss_labels = list(self._LOSS_LABELS)
+        loss_keys = ['physics_loss', 'data_loss', 'total_loss']
+        loss_key_by_label = {label: key for label, key in zip(loss_labels, loss_keys)}
+
+        dimensions = parameter_names + loss_labels
+
+        ranges: Dict[str, Tuple[float, float]] = {}
+        for axis_label in dimensions:
+            values = [
+                self._get_axis_value(axis_label, result, parameter_names, loss_key_by_label)
+                for result in rows
+            ]
+            ranges[axis_label] = self._axis_range_from_values(values)
+
+        return ranges
+
     def _close_loss_landscape_figures(self) -> None:
         """Clear any pending loss-landscape plot tasks."""
         self._loss_landscape_plot_tasks = []
@@ -547,6 +611,8 @@ class PINNTrainer:
 
         Plots are organized into two columns per PDF page. Each plot keeps the
         same full parallel-coordinate content; only the page organization changes.
+        All subplots share a single global scale per dimension so that, e.g., the
+        Data Loss axis uses the same min/max across every snapshot.
         """
         if not self._loss_landscape_plot_tasks:
             return
@@ -557,6 +623,8 @@ class PINNTrainer:
             return
 
         try:
+            global_axis_ranges = self._compute_global_axis_ranges(self._loss_landscape_rows)
+
             with PdfPages(self._loss_landscape_pdf_path) as pdf:
                 tasks = self._loss_landscape_plot_tasks
 
@@ -572,7 +640,8 @@ class PINNTrainer:
                             self._draw_loss_landscape_axis(
                                 ax,
                                 task['results'],
-                                task['checkpoint_info']
+                                task['checkpoint_info'],
+                                global_axis_ranges=global_axis_ranges
                             )
                         else:
                             ax.axis('off')
@@ -819,28 +888,20 @@ class PINNTrainer:
             'checkpoint_info': checkpoint_info
         })
 
-    def _draw_loss_landscape_axis(self, ax, results: list, checkpoint_info: dict):
+    def _draw_loss_landscape_axis(self, ax, results: list, checkpoint_info: dict, global_axis_ranges: Optional[Dict[str, Tuple[float, float]]] = None):
         """Draw a full parallel-coordinate loss landscape on a given axis.
 
         Args:
             ax: Matplotlib axis to draw on
             results: List of dictionaries containing loss landscape data
             checkpoint_info: Dictionary with phase and epoch information
+            global_axis_ranges: Optional shared (lo, hi) range per dimension. When
+                provided, every subplot uses the same scale for each axis so the
+                charts are directly comparable.
         """
         if not results:
             ax.axis('off')
             return
-
-        def _finite(values):
-            finite_values = []
-            for value in values:
-                try:
-                    numeric_value = float(value)
-                except (TypeError, ValueError):
-                    continue
-                if np.isfinite(numeric_value):
-                    finite_values.append(numeric_value)
-            return finite_values
 
         parameter_names = self._get_parameter_names()
 
@@ -857,14 +918,7 @@ class PINNTrainer:
         x_positions = np.arange(n_dims)
 
         def get_axis_value(axis_label: str, result: dict):
-            if axis_label in parameter_names:
-                if axis_label in result:
-                    return result[axis_label]
-                if result.get('parameter') == axis_label:
-                    return result.get('value')
-                return None
-
-            return result.get(loss_key_by_label[axis_label])
+            return self._get_axis_value(axis_label, result, parameter_names, loss_key_by_label)
 
         current_values = {}
         for axis_label in dimensions:
@@ -887,15 +941,16 @@ class PINNTrainer:
 
         axis_ranges = {}
         for axis_label in dimensions:
-            vals = _finite([get_axis_value(axis_label, result) for result in results])
-            if vals:
-                lo, hi = min(vals), max(vals)
-                if lo == hi:
-                    lo -= 0.5
-                    hi += 0.5
-                axis_ranges[axis_label] = (lo, hi)
-            else:
-                axis_ranges[axis_label] = (0.0, 1.0)
+            axis_ranges[axis_label] = self._axis_range_from_values(
+                [get_axis_value(axis_label, result) for result in results]
+            )
+
+        # Override local ranges with the shared global ranges so every subplot on
+        # every page uses the same scale for each dimension (e.g. Data Loss).
+        if global_axis_ranges:
+            for axis_label in dimensions:
+                if axis_label in global_axis_ranges:
+                    axis_ranges[axis_label] = global_axis_ranges[axis_label]
 
         def value_to_y(axis_label, value):
             lo, hi = axis_ranges[axis_label]

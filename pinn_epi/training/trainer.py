@@ -748,11 +748,11 @@ class PINNTrainer:
     def _finalize_loss_landscape_artifacts(self) -> None:
         """Write all pending loss-landscape plots into one multi-page PDF.
 
-        Plots are organized into two columns per PDF page. Each page carries a
-        single general experiment summary at the very top (instead of repeating
-        the physics equations under every subplot). All subplots share a single
-        global scale per dimension so that, e.g., the Data Loss axis uses the
-        same min/max across every snapshot.
+        Plots are organized into two columns per PDF page. The first page carries
+        the general experiment summary and physics equations at the very top.
+        Subsequent pages omit the header to avoid repetition. All subplots share
+        a single global scale per dimension so that, e.g., the Data Loss axis
+        uses the same min/max across every snapshot.
         """
         if not self._loss_landscape_plot_tasks:
             return
@@ -772,6 +772,7 @@ class PINNTrainer:
                 tasks = self._loss_landscape_plot_tasks
 
                 for start_idx in range(0, len(tasks), 2):
+                    first_page = start_idx == 0
                     fig, axes = plt.subplots(1, 2, figsize=(16, 8), squeeze=False)
 
                     for col_idx in range(2):
@@ -789,18 +790,21 @@ class PINNTrainer:
                         else:
                             ax.axis('off')
 
-                    fig.text(
-                        0.5,
-                        0.985,
-                        header_text,
-                        ha='center',
-                        va='top',
-                        fontsize=11,
-                        linespacing=1.35,
-                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.9),
-                        transform=fig.transFigure,
-                    )
-                    fig.tight_layout(rect=[0, 0, 1, rect_top])
+                    if first_page:
+                        fig.text(
+                            0.5,
+                            0.985,
+                            header_text,
+                            ha='center',
+                            va='top',
+                            fontsize=11,
+                            linespacing=1.35,
+                            bbox=dict(boxstyle='round', facecolor='white', alpha=0.9),
+                            transform=fig.transFigure,
+                        )
+
+                    rect_top_page = rect_top if first_page else 0.94
+                    fig.tight_layout(rect=[0, 0, 1, rect_top_page])
                     pdf.savefig(fig)
                     plt.close(fig)
 

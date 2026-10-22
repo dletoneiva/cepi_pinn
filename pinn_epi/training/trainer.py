@@ -248,6 +248,33 @@ class PINNTrainer:
     _PARAMETER_GREEK_MAP = PARAMETER_GREEK_MAP
     _PHYSICS_EQUATION_LATEX = PHYSICS_EQUATION_LATEX
 
+    _HIGH_CONSPICUITY_PALETTE = [
+        "#FF3B30",
+        "#FF9500",
+        "#FFCC00",
+        "#34C759",
+        "#00C7BE",
+        "#007AFF",
+        "#5856D6",
+        "#AF52DE",
+        "#FF2D55",
+        "#A2845E",
+        "#7FFF00",
+        "#00FFFF",
+        "#FF00FF",
+        "#FF8C00",
+        "#32CD32",
+        "#1E90FF",
+        "#9400D3",
+        "#00CED1",
+        "#FF1493",
+        "#8A2BE2",
+        "#FF4500",
+        "#00BFFF",
+        "#BA55D3",
+        "#20B2AA",
+    ]
+
     def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict):
         """Initialize the PINN trainer with model, physics constraints, and training data.
         
@@ -340,11 +367,15 @@ class PINNTrainer:
         return f"${text}$"
 
     @staticmethod
-    def _axis_range_from_values(values: list) -> Tuple[float, float]:
+    def _axis_range_from_values(values: list, log_scale: bool = False) -> Tuple[float, float]:
         """Compute a (lo, hi) axis range from a list of possibly-invalid values.
 
         Ignores non-numeric and non-finite entries. When all valid values are
         equal (or none exist) the range is widened so the axis stays visible.
+
+        If ``log_scale`` is True, the returned range is in original value space,
+        but based only on positive finite values. Non-positive values are handled
+        by the caller by clamping them to the bottom of the log axis.
         """
         finite_values = []
         for value in values:
@@ -355,14 +386,40 @@ class PINNTrainer:
             if np.isfinite(numeric_value):
                 finite_values.append(numeric_value)
 
-        if finite_values:
-            lo, hi = min(finite_values), max(finite_values)
+        if not finite_values:
+            return (0.0, 1.0)
+
+        if log_scale:
+            positive_values = [v for v in finite_values if v > 0]
+            if not positive_values:
+                return (0.0, 1.0)
+
+            lo = min(positive_values)
+            hi = max(positive_values)
+
+            if any(v <= 0 for v in finite_values):
+                lo = lo / 10.0
+                if lo <= 0:
+                    lo = min(positive_values)
+
             if lo == hi:
-                lo -= 0.5
-                hi += 0.5
+                if hi > 0:
+                    lo = hi / 10.0
+                    hi = hi * 10.0
+                    if lo <= 0:
+                        lo = np.finfo(float).tiny
+                        if hi <= lo:
+                            hi = lo * 10.0
+                else:
+                    return (0.0, 1.0)
+
             return (lo, hi)
 
-        return (0.0, 1.0)
+        lo, hi = min(finite_values), max(finite_values)
+        if lo == hi:
+            lo -= 0.5
+            hi += 0.5
+        return (lo, hi)
 
     def _normalize_equation_lines(self, value: Any) -> list:
         """Convert an equation value into a list of mathtext lines.
@@ -692,9 +749,8 @@ class PINNTrainer:
         """Compute one (lo, hi) range per dimension across ALL loss-landscape rows.
 
         Using a single global range per dimension (parameter axes and loss axes)
-        guarantees that every subplot on every page shares the same scale. For
-        example, the "Data Loss" axis spans the same min/max in every snapshot,
-        making the plots directly comparable.
+        guarantees that every subplot on every page shares the same scale. Loss
+        axes use a shared log scale; parameter axes remain linear.
         """
         parameter_names = self._get_parameter_names()
         if not parameter_names:
@@ -705,6 +761,7 @@ class PINNTrainer:
         loss_key_by_label = {label: key for label, key in zip(loss_labels, loss_keys)}
 
         dimensions = parameter_names + loss_labels
+        loss_labels_set = set(loss_labels)
 
         ranges: Dict[str, Tuple[float, float]] = {}
         for axis_label in dimensions:
@@ -712,7 +769,10 @@ class PINNTrainer:
                 self._get_axis_value(axis_label, result, parameter_names, loss_key_by_label)
                 for result in rows
             ]
-            ranges[axis_label] = self._axis_range_from_values(values)
+            ranges[axis_label] = self._axis_range_from_values(
+                values,
+                log_scale=axis_label in loss_labels_set
+            )
 
         return ranges
 
@@ -1046,12 +1106,28 @@ class PINNTrainer:
             'checkpoint_info': checkpoint_info
         })
 
+    def _get_sweep_colors(self, n_colors: int) -> list:
+        """Return a high-contrast palette for loss-landscape sweep lines."""
+        if n_colors <= 0:
+            return []
+
+        palette = list(self._HIGH_CONSPICUITY_PALETTE)
+        if n_colors <= len(palette):
+            return palette[:n_colors]
+
+        try:
+            cmap = plt.colormaps["hsv"]
+        except AttributeError:
+            cmap = plt.cm.get_cmap("hsv")
+
+        return [cmap(i / max(n_colors, 1)) for i in range(n_colors)]
+
     def _draw_loss_landscape_axis(self, ax, results: list, checkpoint_info: dict, global_axis_ranges: Optional[Dict[str, Tuple[float, float]]] = None):
         """Draw a full parallel-coordinate loss landscape on a given axis.
 
-        The physics equations are no longer rendered per subplot; they have been
-        replaced by a single page-level experiment summary added in
-        ``_finalize_loss_landscape_artifacts``.
+        Loss axes are rendered on a shared log scale across snapshots, while
+        parameter axes remain linear. The current/actual value line is drawn in
+        black to distinguish it from the colored grid-search sweep lines.
 
         Args:
             ax: Matplotlib axis to draw on
@@ -1073,6 +1149,7 @@ class PINNTrainer:
         loss_labels = list(self._LOSS_LABELS)
         loss_keys = ['physics_loss', 'data_loss', 'total_loss']
         loss_key_by_label = {label: key for label, key in zip(loss_labels, loss_keys)}
+        loss_labels_set = set(loss_labels)
 
         dimensions = parameter_names + loss_labels
         n_dims = len(dimensions)
@@ -1104,7 +1181,8 @@ class PINNTrainer:
         axis_ranges = {}
         for axis_label in dimensions:
             axis_ranges[axis_label] = self._axis_range_from_values(
-                [get_axis_value(axis_label, result) for result in results]
+                [get_axis_value(axis_label, result) for result in results],
+                log_scale=axis_label in loss_labels_set
             )
 
         # Override local ranges with the shared global ranges so every subplot on
@@ -1114,10 +1192,28 @@ class PINNTrainer:
                 if axis_label in global_axis_ranges:
                     axis_ranges[axis_label] = global_axis_ranges[axis_label]
 
-        def value_to_y(axis_label, value):
+        def value_to_y(axis_label: str, value: float) -> float:
             lo, hi = axis_ranges[axis_label]
+
+            if axis_label in loss_labels_set and lo > 0 and hi > 0 and hi != lo:
+                if value <= 0:
+                    return 0.0
+
+                try:
+                    log_value = np.log10(float(value))
+                    log_lo = np.log10(lo)
+                    log_hi = np.log10(hi)
+                except (ValueError, FloatingPointError):
+                    return 0.5
+
+                if log_hi == log_lo:
+                    return 0.5
+
+                return (log_value - log_lo) / (log_hi - log_lo)
+
             if hi == lo:
                 return 0.5
+
             return (float(value) - lo) / (hi - lo)
 
         def line_points(result):
@@ -1173,9 +1269,23 @@ class PINNTrainer:
             current_value = current_values.get(axis_label)
             tick_fracs = []
 
+            use_log_ticks = (
+                axis_label in loss_labels_set
+                and lo > 0
+                and hi > 0
+                and hi != lo
+            )
+
             for t in range(n_ticks):
                 frac = t / (n_ticks - 1) if n_ticks > 1 else 0.5
-                val = lo + frac * (hi - lo)
+
+                if use_log_ticks:
+                    log_lo = np.log10(lo)
+                    log_hi = np.log10(hi)
+                    val = float(10 ** (log_lo + frac * (log_hi - log_lo)))
+                else:
+                    val = lo + frac * (hi - lo)
+
                 tick_fracs.append(frac)
                 ax.text(
                     i - 0.03,
@@ -1205,9 +1315,12 @@ class PINNTrainer:
                         bbox=dict(facecolor='white', edgecolor='none', pad=1.0),
                     )
 
-        # Color mapping for swept parameters.
-        colors = plt.cm.tab20(np.linspace(0, 1, max(n_param_axes, 1)))
-        param_color_map = {name: colors[idx] for idx, name in enumerate(parameter_names)}
+        # High-contrast color mapping for swept parameters.
+        colors = self._get_sweep_colors(max(n_param_axes, 1))
+        param_color_map = {
+            name: colors[idx % len(colors)]
+            for idx, name in enumerate(parameter_names)
+        }
 
         # Draw lines for each result.
         for result in results:
@@ -1216,9 +1329,9 @@ class PINNTrainer:
                 continue
 
             color = param_color_map.get(result.get('parameter'), 'gray')
-            ax.plot(x_positions, ys, color=color, alpha=0.3, linewidth=1, zorder=2)
+            ax.plot(x_positions, ys, color=color, alpha=0.55, linewidth=1.3, zorder=2)
 
-        # Highlight current parameter values.
+        # Highlight current parameter values with a distinct black line.
         for result in results:
             if not result.get('is_current', False):
                 continue
@@ -1227,14 +1340,16 @@ class PINNTrainer:
             if ys is None:
                 continue
 
-            color = param_color_map.get(result.get('parameter'), 'gray')
             ax.plot(
                 x_positions,
                 ys,
-                color=color,
-                linewidth=3,
+                color='black',
+                linewidth=3.5,
                 marker='o',
-                markersize=6,
+                markersize=7,
+                markerfacecolor='black',
+                markeredgecolor='white',
+                markeredgewidth=1.2,
                 zorder=3,
             )
 

@@ -11,6 +11,7 @@ import mlflow.pytorch
 import hydra
 import os
 import csv
+import re
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -126,87 +127,71 @@ _DEFAULT_PARAMETER_GREEK_MAP = {
     "efficacy": r"\epsilon",
 }
 
+# Matplotlib's mathtext parser does NOT support LaTeX environments such as
+# \begin{array}{l} ... \end{array}. Each equation is therefore stored as a list
+# of single-line mathtext expressions (no surrounding $ delimiters). They are
+# rendered as separate $...$ lines joined by newlines, which mathtext supports.
 _DEFAULT_PHYSICS_EQUATION_LATEX = {
-    "SI": (
-        r"$\begin{array}{l} "
-        r"\frac{dS}{dt} = -\beta S I \\ "
-        r"\frac{dI}{dt} = \beta S I "
-        r"\end{array}$"
-    ),
-    "SIR": (
-        r"$\begin{array}{l} "
-        r"\frac{dS}{dt} = -\beta S I \\ "
-        r"\frac{dI}{dt} = \beta S I - \gamma I \\ "
-        r"\frac{dR}{dt} = \gamma I "
-        r"\end{array}$"
-    ),
-    "SIS": (
-        r"$\begin{array}{l} "
-        r"\frac{dS}{dt} = -\beta S I + \gamma I \\ "
-        r"\frac{dI}{dt} = \beta S I - \gamma I "
-        r"\end{array}$"
-    ),
-    "SEIR": (
-        r"$\begin{array}{l} "
-        r"\frac{dS}{dt} = -\beta S I \\ "
-        r"\frac{dE}{dt} = \beta S I - \sigma E \\ "
-        r"\frac{dI}{dt} = \sigma E - \gamma I \\ "
-        r"\frac{dR}{dt} = \gamma I "
-        r"\end{array}$"
-    ),
-    "SIRD": (
-        r"$\begin{array}{l} "
-        r"\frac{dS}{dt} = -\beta S I \\ "
-        r"\frac{dI}{dt} = \beta S I - \gamma I - \delta I \\ "
-        r"\frac{dR}{dt} = \gamma I \\ "
-        r"\frac{dD}{dt} = \delta I "
-        r"\end{array}$"
-    ),
-    "SIRV": (
-        r"$\begin{array}{l} "
-        r"\frac{dS}{dt} = -\beta S I - \upsilon S \\ "
-        r"\frac{dI}{dt} = \beta S I - \gamma I \\ "
-        r"\frac{dR}{dt} = \gamma I \\ "
-        r"\frac{dV}{dt} = \upsilon S "
-        r"\end{array}$"
-    ),
-    "SIRDV": (
-        r"$\begin{array}{l} "
-        r"\frac{dS}{dt} = -\beta S I - \upsilon S \\ "
-        r"\frac{dI}{dt} = \beta S I - \gamma I - \delta I \\ "
-        r"\frac{dR}{dt} = \gamma I \\ "
-        r"\frac{dD}{dt} = \delta I \\ "
-        r"\frac{dV}{dt} = \upsilon S "
-        r"\end{array}$"
-    ),
-    "SEIRD": (
-        r"$\begin{array}{l} "
-        r"\frac{dS}{dt} = -\beta S I \\ "
-        r"\frac{dE}{dt} = \beta S I - \sigma E \\ "
-        r"\frac{dI}{dt} = \sigma E - \gamma I - \delta I \\ "
-        r"\frac{dR}{dt} = \gamma I \\ "
-        r"\frac{dD}{dt} = \delta I "
-        r"\end{array}$"
-    ),
-    "SEIRV": (
-        r"$\begin{array}{l} "
-        r"\frac{dS}{dt} = -\beta S I - \upsilon S \\ "
-        r"\frac{dE}{dt} = \beta S I - \sigma E \\ "
-        r"\frac{dI}{dt} = \sigma E - \gamma I \\ "
-        r"\frac{dR}{dt} = \gamma I \\ "
-        r"\frac{dV}{dt} = \upsilon S "
-        r"\end{array}$"
-    ),
-    "SEIRDV": (
-        r"$\begin{array}{l} "
-        r"\frac{dS}{dt} = -\beta S I - \upsilon S \\ "
-        r"\frac{dE}{dt} = \beta S I - \sigma E \\ "
-        r"\frac{dI}{dt} = \sigma E - \gamma I - \delta I \\ "
-        r"\frac{dR}{dt} = \gamma I \\ "
-        r"\frac{dD}{dt} = \delta I \\ "
-        r"\frac{dV}{dt} = \upsilon S "
-        r"\end{array}$"
-    ),
+    "SI": [
+        r"\frac{dS}{dt} = -\beta S I",
+        r"\frac{dI}{dt} = \beta S I",
+    ],
+    "SIR": [
+        r"\frac{dS}{dt} = -\beta S I",
+        r"\frac{dI}{dt} = \beta S I - \gamma I",
+        r"\frac{dR}{dt} = \gamma I",
+    ],
+    "SIS": [
+        r"\frac{dS}{dt} = -\beta S I + \gamma I",
+        r"\frac{dI}{dt} = \beta S I - \gamma I",
+    ],
+    "SEIR": [
+        r"\frac{dS}{dt} = -\beta S I",
+        r"\frac{dE}{dt} = \beta S I - \sigma E",
+        r"\frac{dI}{dt} = \sigma E - \gamma I",
+        r"\frac{dR}{dt} = \gamma I",
+    ],
+    "SIRD": [
+        r"\frac{dS}{dt} = -\beta S I",
+        r"\frac{dI}{dt} = \beta S I - \gamma I - \delta I",
+        r"\frac{dR}{dt} = \gamma I",
+        r"\frac{dD}{dt} = \delta I",
+    ],
+    "SIRV": [
+        r"\frac{dS}{dt} = -\beta S I - \upsilon S",
+        r"\frac{dI}{dt} = \beta S I - \gamma I",
+        r"\frac{dR}{dt} = \gamma I",
+        r"\frac{dV}{dt} = \upsilon S",
+    ],
+    "SIRDV": [
+        r"\frac{dS}{dt} = -\beta S I - \upsilon S",
+        r"\frac{dI}{dt} = \beta S I - \gamma I - \delta I",
+        r"\frac{dR}{dt} = \gamma I",
+        r"\frac{dD}{dt} = \delta I",
+        r"\frac{dV}{dt} = \upsilon S",
+    ],
+    "SEIRD": [
+        r"\frac{dS}{dt} = -\beta S I",
+        r"\frac{dE}{dt} = \beta S I - \sigma E",
+        r"\frac{dI}{dt} = \sigma E - \gamma I - \delta I",
+        r"\frac{dR}{dt} = \gamma I",
+        r"\frac{dD}{dt} = \delta I",
+    ],
+    "SEIRV": [
+        r"\frac{dS}{dt} = -\beta S I - \upsilon S",
+        r"\frac{dE}{dt} = \beta S I - \sigma E",
+        r"\frac{dI}{dt} = \sigma E - \gamma I",
+        r"\frac{dR}{dt} = \gamma I",
+        r"\frac{dV}{dt} = \upsilon S",
+    ],
+    "SEIRDV": [
+        r"\frac{dS}{dt} = -\beta S I - \upsilon S",
+        r"\frac{dE}{dt} = \beta S I - \sigma E",
+        r"\frac{dI}{dt} = \sigma E - \gamma I - \delta I",
+        r"\frac{dR}{dt} = \gamma I",
+        r"\frac{dD}{dt} = \delta I",
+        r"\frac{dV}{dt} = \upsilon S",
+    ],
 }
 
 PARAMETER_GREEK_MAP = {
@@ -332,29 +317,12 @@ class PINNTrainer:
                 return float('nan')
 
     @staticmethod
-    def _coerce_latex_value(value: Any) -> str:
-        """Coerce a LaTeX-like value into a single string."""
+    def _ensure_math_delimiters(value: Any) -> str:
+        """Ensure a single mathtext token is wrapped in $...$ delimiters."""
         if value is None:
             return ""
 
-        if isinstance(value, (list, tuple)):
-            lines = []
-            for line in value:
-                text = str(line).strip()
-                if text.startswith("$") and text.endswith("$"):
-                    text = text[1:-1].strip()
-                if text:
-                    lines.append(text)
-            if not lines:
-                return ""
-            return r"\begin{array}{l} " + r" \\ ".join(lines) + r" \end{array}"
-
-        return str(value)
-
-    @staticmethod
-    def _ensure_math_delimiters(value: Any) -> str:
-        """Ensure a LaTeX string is wrapped in mathtext delimiters."""
-        text = PINNTrainer._coerce_latex_value(value).strip()
+        text = str(value).strip()
         if not text:
             return ""
 
@@ -368,6 +336,47 @@ class PINNTrainer:
             return "$" + text
 
         return f"${text}$"
+
+    def _normalize_equation_lines(self, value: Any) -> list:
+        """Convert an equation value into a list of mathtext lines.
+
+        Accepts either a list/tuple of lines or a single string. Handles the
+        unsupported ``\\begin{array}{l} ... \\end{array}`` environment by
+        stripping the environment markers and splitting on ``\\\\`` row
+        separators, so the result is always a list of single-line mathtext
+        expressions (without ``$`` delimiters).
+        """
+        if value is None:
+            return []
+
+        if isinstance(value, (list, tuple)):
+            text = r" \\ ".join(str(item) for item in value)
+        else:
+            text = str(value)
+
+        # Matplotlib mathtext does not support array environments; remove them
+        # so the content can be split into independent lines instead.
+        text = re.sub(r"\\begin\{array\}(?:\s*\{[^}]*\})?", " ", text)
+        text = re.sub(r"\\end\{array\}", " ", text)
+
+        text = text.strip()
+        if text.startswith("$") and text.endswith("$"):
+            text = text[1:-1]
+
+        chunks = text.split(r"\\")
+
+        lines = []
+        for chunk in chunks:
+            chunk = chunk.strip()
+            if chunk.startswith("$"):
+                chunk = chunk[1:]
+            if chunk.endswith("$"):
+                chunk = chunk[:-1]
+            chunk = chunk.strip()
+            if chunk:
+                lines.append(chunk)
+
+        return lines
 
     def _get_parameter_display_label(self, name: str) -> str:
         """Return a display label for a parameter, using Greek letters when known."""
@@ -400,7 +409,12 @@ class PINNTrainer:
         return self._get_parameter_display_label(axis_label)
 
     def _get_physics_equation_latex(self) -> str:
-        """Return a LaTeX equation for the current physics model, if available."""
+        """Return a mathtext equation for the current physics model, if available.
+
+        The result is a multi-line string where each line is an independent
+        ``$...$`` mathtext block. This avoids the unsupported ``\\begin{array}``
+        environment while still rendering the full system of ODEs.
+        """
         model_name = type(self.physics_model).__name__
         normalized_model_name = model_name.replace("Model", "").upper()
         config_model_type = str(self.config.get("model_type", "")).upper()
@@ -412,35 +426,47 @@ class PINNTrainer:
             str(self.config.get("model_type", "")),
         ]
 
+        raw = None
         for key in candidate_keys:
             if not key:
                 continue
 
             if key in self._PHYSICS_EQUATION_LATEX:
-                return self._ensure_math_delimiters(self._PHYSICS_EQUATION_LATEX[key])
+                raw = self._PHYSICS_EQUATION_LATEX[key]
+                break
 
             lower_key = str(key).lower()
             if lower_key in self._PHYSICS_EQUATION_LATEX:
-                return self._ensure_math_delimiters(self._PHYSICS_EQUATION_LATEX[lower_key])
+                raw = self._PHYSICS_EQUATION_LATEX[lower_key]
+                break
 
-        getter = getattr(self.physics_model, "get_equation_latex", None)
-        if callable(getter):
-            try:
-                return self._ensure_math_delimiters(getter())
-            except Exception:
-                pass
+        if raw is None:
+            getter = getattr(self.physics_model, "get_equation_latex", None)
+            if callable(getter):
+                try:
+                    raw = getter()
+                except Exception:
+                    raw = None
 
-        for attr in ("equation_latex", "physics_equation_latex"):
-            value = getattr(self.physics_model, attr, None)
-            if value is not None:
-                return self._ensure_math_delimiters(value)
+        if raw is None:
+            for attr in ("equation_latex", "physics_equation_latex"):
+                value = getattr(self.physics_model, attr, None)
+                if value is not None:
+                    raw = value
+                    break
 
-        for key in sorted(self._PHYSICS_EQUATION_LATEX.keys(), key=lambda item: len(str(item)), reverse=True):
-            key_str = str(key)
-            if key_str and key_str.upper() in normalized_model_name:
-                return self._ensure_math_delimiters(self._PHYSICS_EQUATION_LATEX[key])
+        if raw is None:
+            for key in sorted(self._PHYSICS_EQUATION_LATEX.keys(), key=lambda item: len(str(item)), reverse=True):
+                key_str = str(key)
+                if key_str and key_str.upper() in normalized_model_name:
+                    raw = self._PHYSICS_EQUATION_LATEX[key]
+                    break
 
-        return ""
+        lines = self._normalize_equation_lines(raw)
+        if not lines:
+            return ""
+
+        return "\n".join(f"${line}$" for line in lines)
 
     def _get_parameter_names(self) -> list:
         """Return ordered compartmental parameter names suitable for CSV/plot axes.

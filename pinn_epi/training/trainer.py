@@ -993,7 +993,9 @@ class PINNTrainer:
                 bbox=dict(facecolor='white', edgecolor='none', pad=1.0),
             )
 
-        # Add raw-value tick labels to each axis.
+        # Add raw-value tick labels to each axis. These are drawn on top of the
+        # sweep lines with a white background so they remain legible regardless
+        # of how many lines cross behind them.
         if n_dims > 10:
             n_ticks = 2
         elif n_dims > 6:
@@ -1020,7 +1022,9 @@ class PINNTrainer:
                     ha='right',
                     va='center',
                     fontsize=tick_fontsize,
-                    color='gray'
+                    color='gray',
+                    zorder=4,
+                    bbox=dict(facecolor='white', edgecolor='none', pad=1.0),
                 )
 
             if current_value is not None:
@@ -1034,7 +1038,9 @@ class PINNTrainer:
                         va='center',
                         fontsize=current_tick_fontsize,
                         fontweight='bold',
-                        color='darkred'
+                        color='darkred',
+                        zorder=5,
+                        bbox=dict(facecolor='white', edgecolor='none', pad=1.0),
                     )
 
         # Color mapping for swept parameters.

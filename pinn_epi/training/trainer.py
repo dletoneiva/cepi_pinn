@@ -1178,6 +1178,169 @@ class PINNTrainer:
 
         return [cmap(i / max(n_colors, 1)) for i in range(n_colors)]
 
+    @staticmethod
+    def _deduplicate_tensors(tensors: list) -> list:
+        """Return unique tensors by object identity."""
+        seen = set()
+        unique = []
+        for tensor in tensors:
+            if not isinstance(tensor, torch.Tensor):
+                continue
+            tensor_id = id(tensor)
+            if tensor_id not in seen:
+                seen.add(tensor_id)
+                unique.append(tensor)
+        return unique
+
+    @staticmethod
+    def _flatten_autograd_result(grads, tensors: list) -> torch.Tensor:
+        """Flatten autograd results into a single 1D float tensor."""
+        flat = []
+        for grad, tensor in zip(grads, tensors):
+            if grad is None:
+                flat.append(torch.zeros(tensor.numel(), dtype=torch.float32, device=tensor.device))
+            else:
+                flat.append(grad.detach().float().reshape(-1))
+
+        if not flat:
+            return torch.empty(0, dtype=torch.float32)
+
+        return torch.cat(flat)
+
+    def _cosine_from_grads(self, grads_data, grads_physics, tensors: list) -> Optional[float]:
+        """Compute cosine similarity between two flattened gradient vectors."""
+        if not tensors:
+            return None
+
+        try:
+            flat_data = self._flatten_autograd_result(grads_data, tensors)
+            flat_physics = self._flatten_autograd_result(grads_physics, tensors)
+
+            if flat_data.numel() == 0 or flat_physics.numel() == 0:
+                return None
+
+            norm_data = flat_data.norm()
+            norm_physics = flat_physics.norm()
+
+            if norm_data == 0 or norm_physics == 0:
+                return None
+
+            cosine = (torch.dot(flat_data, flat_physics) / (norm_data * norm_physics)).item()
+
+            if not np.isfinite(cosine):
+                return None
+
+            return float(np.clip(cosine, -1.0, 1.0))
+        except Exception:
+            return None
+
+    def _prepare_compartmental_tensors_for_gradient(self):
+        """Return tensors for compartmental parameters and a restore mapping.
+
+        Fixed parameters are temporarily replaced by leaf tensors that require
+        gradients so autograd can differentiate the loss with respect to them.
+        """
+        original = {}
+        tensors = []
+
+        for name, value in list(self.physics_model.parameters.items()):
+            if name in self._RESERVED_COLUMNS:
+                continue
+
+            if isinstance(value, nn.Parameter):
+                if value.requires_grad:
+                    tensors.append(value)
+                else:
+                    leaf = value.detach().clone().to(dtype=torch.float32, device=self.device).requires_grad_(True)
+                    original[name] = value
+                    self.physics_model.parameters[name] = leaf
+                    tensors.append(leaf)
+            elif isinstance(value, torch.Tensor):
+                if value.requires_grad:
+                    tensors.append(value)
+                else:
+                    leaf = value.detach().clone().to(dtype=torch.float32, device=self.device).requires_grad_(True)
+                    original[name] = value
+                    self.physics_model.parameters[name] = leaf
+                    tensors.append(leaf)
+            else:
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    continue
+
+                leaf = torch.tensor(numeric, dtype=torch.float32, device=self.device).requires_grad_(True)
+                original[name] = value
+                self.physics_model.parameters[name] = leaf
+                tensors.append(leaf)
+
+        return original, tensors
+
+    def _restore_compartmental_parameters(self, original: dict) -> None:
+        """Restore compartmental parameters after temporary gradient setup."""
+        for name, value in original.items():
+            self.physics_model.parameters[name] = value
+
+    def _compute_loss_gradient_cosine(self, t_data: torch.Tensor, collocation_points: torch.Tensor) -> Optional[float]:
+        """Compute cosine similarity between data-loss and physics-loss gradients.
+
+        The preferred scope is the compartmental parameter set. If that gradient
+        pair is degenerate (for example, if one gradient norm is zero), the
+        computation falls back to all trainable parameters so the conflict bar
+        remains informative.
+        """
+        original_params, compartmental_tensors = self._prepare_compartmental_tensors_for_gradient()
+
+        try:
+            network_tensors = [p for p in self.model.parameters() if p.requires_grad]
+            learnable_tensors = [p for p in self.learnable_params.parameters() if p.requires_grad]
+
+            compartmental_tensors = self._deduplicate_tensors(compartmental_tensors)
+            all_tensors = self._deduplicate_tensors(network_tensors + learnable_tensors + compartmental_tensors)
+
+            if not all_tensors:
+                return None
+
+            _, data_loss, physics_loss = self.compute_loss(t_data, self.data, collocation_points)
+
+            grads_data_all = torch.autograd.grad(
+                data_loss,
+                all_tensors,
+                retain_graph=True,
+                allow_unused=True
+            )
+            grads_physics_all = torch.autograd.grad(
+                physics_loss,
+                all_tensors,
+                retain_graph=True,
+                allow_unused=True
+            )
+
+            grad_data_map = {id(tensor): grad for tensor, grad in zip(all_tensors, grads_data_all)}
+            grad_physics_map = {id(tensor): grad for tensor, grad in zip(all_tensors, grads_physics_all)}
+
+            compartmental_grads_data = [grad_data_map.get(id(tensor)) for tensor in compartmental_tensors]
+            compartmental_grads_physics = [grad_physics_map.get(id(tensor)) for tensor in compartmental_tensors]
+
+            cosine_compartmental = self._cosine_from_grads(
+                compartmental_grads_data,
+                compartmental_grads_physics,
+                compartmental_tensors
+            )
+
+            if cosine_compartmental is not None:
+                return cosine_compartmental
+
+            return self._cosine_from_grads(
+                grads_data_all,
+                grads_physics_all,
+                all_tensors
+            )
+        except Exception:
+            return None
+        finally:
+            self._restore_compartmental_parameters(original_params)
+
     def _draw_loss_landscape_axis(self, ax, results: list, checkpoint_info: dict, global_axis_ranges: Optional[Dict[str, Tuple[float, float]]] = None):
         """Draw a full parallel-coordinate loss landscape on a given axis.
 
@@ -1445,8 +1608,87 @@ class PINNTrainer:
                 zorder=3,
             )
 
+        # Gradient-conflict bar: cosine similarity between data and physics
+        # gradients. -1 means conflictuous optimization, +1 means coherent.
+        cosine = checkpoint_info.get('gradient_cosine')
+        try:
+            cosine = float(cosine)
+        except (TypeError, ValueError):
+            cosine = 0.0
+
+        if not np.isfinite(cosine):
+            cosine = 0.0
+
+        cosine = float(np.clip(cosine, -1.0, 1.0))
+
+        bar_y = -0.12
+        bar_half_height = 0.022
+        bar_left = -0.45
+        bar_right = n_dims - 0.55
+        marker_x = bar_left + ((cosine + 1.0) / 2.0) * (bar_right - bar_left)
+
+        gradient_values = np.linspace(-1.0, 1.0, 256).reshape(1, -1)
+        ax.imshow(
+            gradient_values,
+            extent=(
+                bar_left,
+                bar_right,
+                bar_y - bar_half_height,
+                bar_y + bar_half_height,
+            ),
+            aspect='auto',
+            cmap='RdYlGn',
+            vmin=-1.0,
+            vmax=1.0,
+            zorder=1,
+        )
+
+        ax.plot(
+            [marker_x],
+            [bar_y],
+            marker='v',
+            color='black',
+            markersize=11,
+            zorder=2,
+        )
+
+        ax.text(
+            marker_x,
+            bar_y + 0.045,
+            f'cos = {cosine:.2f}',
+            ha='center',
+            va='bottom',
+            fontsize=9,
+            fontweight='bold',
+            color='black',
+            zorder=3,
+            bbox=dict(facecolor='white', edgecolor='none', pad=1.0),
+        )
+
+        ax.text(
+            bar_left,
+            bar_y - 0.045,
+            'Conflictuous optimization',
+            ha='left',
+            va='top',
+            fontsize=9,
+            color='darkred',
+            zorder=3,
+        )
+
+        ax.text(
+            bar_right,
+            bar_y - 0.045,
+            'Coherent optimization',
+            ha='right',
+            va='top',
+            fontsize=9,
+            color='darkgreen',
+            zorder=3,
+        )
+
         ax.set_xlim(-0.5, n_dims - 0.5)
-        ax.set_ylim(-0.05, 1.12)
+        ax.set_ylim(-0.25, 1.12)
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():
@@ -1512,7 +1754,10 @@ class PINNTrainer:
         
         # Save results
         if all_results:
-            self.save_loss_landscape(all_results, checkpoint_info)
+            gradient_cosine = self._compute_loss_gradient_cosine(t_tensor, collocation_points)
+            landscape_info = dict(checkpoint_info)
+            landscape_info['gradient_cosine'] = gradient_cosine
+            self.save_loss_landscape(all_results, landscape_info)
 
     def save_model_for_inference(self):
         """Save the trained model for later inference.

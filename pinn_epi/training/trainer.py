@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 import logging
+import textwrap
 from typing import Tuple, Dict, Any, Optional
 from pinn_epi.models.networks import ModularPINN
 from pinn_epi.models.physics import CompartmentalModel
@@ -444,13 +445,21 @@ class PINNTrainer:
         """
         model_name = type(self.physics_model).__name__
         normalized_model_name = model_name.replace("Model", "").upper()
-        config_model_type = str(self.config.get("model_type", "")).upper()
+
+        model_cfg = self.config.get("model", {}) or {}
+        if hasattr(model_cfg, "get"):
+            model_type_from_cfg = model_cfg.get("type", "")
+        else:
+            model_type_from_cfg = ""
+
+        config_model_type_raw = str(self.config.get("model_type", "") or model_type_from_cfg or "")
+        config_model_type = config_model_type_raw.upper()
 
         candidate_keys = [
             model_name,
             normalized_model_name,
             config_model_type,
-            str(self.config.get("model_type", "")),
+            config_model_type_raw,
         ]
 
         raw = None
@@ -618,6 +627,25 @@ class PINNTrainer:
             f"Architecture: Backbone: {backbone}, Encoder: {encoder}, Head: {head}"
         )
 
+    def _build_experiment_header_text(self) -> str:
+        """Build the top-of-page description for loss-landscape PDF pages.
+
+        This is intentionally closer to the network-prediction summary in
+        ``plotting.plot_actual_vs_predicted``: a readable wrapped block with a
+        boxed background, plus the physics equations for the current model.
+        """
+        summary_text = self._build_experiment_summary()
+        wrapped_summary = textwrap.fill(summary_text, width=110)
+
+        equation_lines = self._get_physics_equation_lines()
+        if not equation_lines:
+            return wrapped_summary
+
+        equation_text = "\n".join(
+            self._ensure_math_delimiters(line) for line in equation_lines
+        )
+        return f"{wrapped_summary}\n\nPhysics equations:\n{equation_text}"
+
     def _get_parameter_names(self) -> list:
         """Return ordered compartmental parameter names suitable for CSV/plot axes.
 
@@ -736,7 +764,9 @@ class PINNTrainer:
 
         try:
             global_axis_ranges = self._compute_global_axis_ranges(self._loss_landscape_rows)
-            summary_text = self._build_experiment_summary()
+            header_text = self._build_experiment_header_text()
+            header_line_count = max(1, len(header_text.splitlines()))
+            rect_top = max(0.58, 0.94 - 0.045 * header_line_count)
 
             with PdfPages(self._loss_landscape_pdf_path) as pdf:
                 tasks = self._loss_landscape_plot_tasks
@@ -759,8 +789,18 @@ class PINNTrainer:
                         else:
                             ax.axis('off')
 
-                    fig.suptitle(summary_text, fontsize=9, x=0.5, y=0.99)
-                    fig.tight_layout(rect=[0, 0, 1, 0.94])
+                    fig.text(
+                        0.5,
+                        0.985,
+                        header_text,
+                        ha='center',
+                        va='top',
+                        fontsize=11,
+                        linespacing=1.35,
+                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.9),
+                        transform=fig.transFigure,
+                    )
+                    fig.tight_layout(rect=[0, 0, 1, rect_top])
                     pdf.savefig(fig)
                     plt.close(fig)
 

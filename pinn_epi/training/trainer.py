@@ -130,7 +130,7 @@ _DEFAULT_PARAMETER_GREEK_MAP = {
 # Matplotlib's mathtext parser does NOT support LaTeX environments such as
 # \begin{array}{l} ... \end{array}. Each equation is therefore stored as a list
 # of single-line mathtext expressions (no surrounding $ delimiters). They are
-# rendered as separate $...$ lines joined by newlines, which mathtext supports.
+# rendered as a compact inline block using \substack, with at most three lines.
 _DEFAULT_PHYSICS_EQUATION_LATEX = {
     "SI": [
         r"\frac{dS}{dt} = -\beta S I",
@@ -409,11 +409,11 @@ class PINNTrainer:
         return self._get_parameter_display_label(axis_label)
 
     def _get_physics_equation_latex(self) -> str:
-        """Return a mathtext equation for the current physics model, if available.
+        """Return a compact inline mathtext equation for the current physics model.
 
-        The result is a multi-line string where each line is an independent
-        ``$...$`` mathtext block. This avoids the unsupported ``\\begin{array}``
-        environment while still rendering the full system of ODEs.
+        The result is a single ``$...$`` block. Multi-line equations are rendered
+        with ``\\substack`` and are capped at three visual lines. If the model has
+        more than three equations, the third line is marked with ``\\ldots``.
         """
         model_name = type(self.physics_model).__name__
         normalized_model_name = model_name.replace("Model", "").upper()
@@ -466,7 +466,14 @@ class PINNTrainer:
         if not lines:
             return ""
 
-        return "\n".join(f"${line}$" for line in lines)
+        if len(lines) > 3:
+            lines = lines[:3]
+            lines[-1] = f"{lines[-1]} \\ldots"
+
+        if len(lines) == 1:
+            return f"${lines[0]}$"
+
+        return "$" + r"\substack{" + r" \\ ".join(lines) + r"}" + "$"
 
     def _get_parameter_names(self) -> list:
         """Return ordered compartmental parameter names suitable for CSV/plot axes.

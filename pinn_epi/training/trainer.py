@@ -786,9 +786,9 @@ class PINNTrainer:
     def _compute_global_axis_ranges(self, rows: list) -> Dict[str, Tuple[float, float]]:
         """Compute one (lo, hi) range per dimension across ALL loss-landscape rows.
 
-        Using a single global range per dimension (parameter axes and loss axes)
-        guarantees that every subplot on every page shares the same scale. Loss
-        axes use a shared log scale; parameter axes remain linear.
+        Parameter axes keep their own linear scale. All loss axes share a single
+        global log scale so Physics/Data/Total can be compared directly in the
+        same chart and across snapshots.
         """
         parameter_names = self._get_parameter_names()
         if not parameter_names:
@@ -802,15 +802,25 @@ class PINNTrainer:
         loss_labels_set = set(loss_labels)
 
         ranges: Dict[str, Tuple[float, float]] = {}
+        all_loss_values: list = []
+
         for axis_label in dimensions:
             values = [
                 self._get_axis_value(axis_label, result, parameter_names, loss_key_by_label)
                 for result in rows
             ]
+
+            if axis_label in loss_labels_set:
+                all_loss_values.extend(values)
+
             ranges[axis_label] = self._axis_range_from_values(
                 values,
                 log_scale=axis_label in loss_labels_set
             )
+
+        common_loss_range = self._axis_range_from_values(all_loss_values, log_scale=True)
+        for axis_label in loss_labels:
+            ranges[axis_label] = common_loss_range
 
         return ranges
 
@@ -1225,11 +1235,21 @@ class PINNTrainer:
                     break
 
         axis_ranges = {}
+        all_loss_values: list = []
         for axis_label in dimensions:
+            values = [get_axis_value(axis_label, result) for result in results]
+
+            if axis_label in loss_labels_set:
+                all_loss_values.extend(values)
+
             axis_ranges[axis_label] = self._axis_range_from_values(
-                [get_axis_value(axis_label, result) for result in results],
+                values,
                 log_scale=axis_label in loss_labels_set
             )
+
+        common_loss_range = self._axis_range_from_values(all_loss_values, log_scale=True)
+        for axis_label in loss_labels:
+            axis_ranges[axis_label] = common_loss_range
 
         # Override local ranges with the shared global ranges so every subplot on
         # every page uses the same scale for each dimension (e.g. Data Loss).
@@ -1295,8 +1315,6 @@ class PINNTrainer:
         # Axis labels on top with a blank background so they stand out.
         for i, dim in enumerate(dimensions):
             display_label = self._get_axis_display_label(dim)
-            if use_log_axis.get(dim, False):
-                display_label = f"{display_label} (log₁₀)"
 
             ax.text(
                 i,
@@ -1434,7 +1452,10 @@ class PINNTrainer:
         for spine in ax.spines.values():
             spine.set_visible(False)
 
-        title = f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}'
+        title = (
+            f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}\n'
+            'Losses are in log scale'
+        )
         ax.set_title(title, fontsize=12)
 
     def generate_loss_landscape(self, t_tensor: torch.Tensor, collocation_points: torch.Tensor, 

@@ -507,6 +507,117 @@ class PINNTrainer:
 
         return r"$\substack{" + r" \\ ".join(lines) + r"}$"
 
+    @staticmethod
+    def _fmt_scalar(value: Any) -> str:
+        """Format a numeric config value for the summary, keeping a decimal point.
+
+        ``1.0`` renders as ``1.0`` (not ``1``), while ``0.001`` renders as
+        ``0.001``. Non-numeric values fall back to their string form.
+        """
+        try:
+            f = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+
+        text = f"{f:g}"
+        if "." not in text and "e" not in text.lower():
+            text += ".0"
+        return text
+
+    @staticmethod
+    def _camel_to_snake(name: str) -> str:
+        """Convert a CamelCase class name to snake_case for the summary."""
+        step1 = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', name)
+        step2 = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', step1)
+        return step2.lower()
+
+    def _backbone_label(self, backbone: Any) -> str:
+        """Return a short architecture label for the backbone component."""
+        if backbone is None:
+            return "None"
+
+        name = type(backbone).__name__
+        if "MLP" in name.upper():
+            return "mlp"
+
+        cleaned = name
+        for suffix in ("Network", "Backbone"):
+            if cleaned.endswith(suffix):
+                cleaned = cleaned[: -len(suffix)]
+                break
+
+        return self._camel_to_snake(cleaned) if cleaned else "mlp"
+
+    def _encoder_label(self, encoder: Any) -> str:
+        """Return a short architecture label for the encoder component."""
+        if encoder is None:
+            return "None"
+
+        name = type(encoder).__name__
+        if name.endswith("Encoder"):
+            name = name[: -len("Encoder")]
+
+        return self._camel_to_snake(name) if name else "encoder"
+
+    def _head_label(self, head: Any) -> str:
+        """Return a short architecture label for the head component."""
+        if head is None:
+            return "None"
+
+        name = type(head).__name__
+        if name.endswith("Head"):
+            name = name[: -len("Head")]
+
+        if name:
+            return name[0].lower() + name[1:]
+
+        return "head"
+
+    def _build_experiment_summary(self) -> str:
+        """Build a single-line experiment summary for the top of each PDF page.
+
+        Mirrors the style of the network-prediction summary, packing the model
+        equations name, loss weights, optimizer settings, collocation count,
+        learned parameters, observed variables and architecture into one line.
+        """
+        model_name = type(self.physics_model).__name__.replace("Model", "")
+
+        data_weight = self._fmt_scalar(self.config.get('data_weight', 1.0))
+        physics_weight = self._fmt_scalar(self.config.get('physics_weight', 1.0))
+
+        adam_epochs = self.config.get('adam_epochs', 5000)
+        adam_lr = self._fmt_scalar(self.config.get('adam_lr', 1e-3))
+        lbfgs_max_iter = self.config.get('lbfgs_max_iter', 100)
+        n_collocation_points = self.config.get('n_collocation_points', 100)
+
+        learnable = self.config.get('learnable_parameters', {}) or {}
+        if learnable:
+            learned = "[" + ", ".join(str(key) for key in learnable.keys()) + "]"
+        else:
+            learned = "None"
+
+        observables_config = self.config.get('observables', {}) or {}
+        observed_vars = observables_config.get('observed_variables', []) or []
+        if observed_vars:
+            observed = "[" + ", ".join(str(var) for var in observed_vars) + "]"
+        else:
+            observed = "None"
+
+        backbone = self._backbone_label(getattr(self.model, "backbone", None))
+        encoder = self._encoder_label(getattr(self.model, "encoder", None))
+        head = self._head_label(getattr(self.model, "head", None))
+
+        return (
+            f"Equations: {model_name} | "
+            f"Loss: Data={data_weight}, Physics={physics_weight} | "
+            f"Adam: {adam_epochs}ep, lr={adam_lr} | "
+            f"LBFGS: {lbfgs_max_iter}iter | "
+            f"Collocation: {n_collocation_points}pts | "
+            f"Learned: {learned} | "
+            f"Observed: {observed} | "
+            f"Architecture: Backbone: {backbone}, Encoder: {encoder}, Head: {head}"
+        )
+
     def _get_parameter_names(self) -> list:
         """Return ordered compartmental parameter names suitable for CSV/plot axes.
 
@@ -609,10 +720,11 @@ class PINNTrainer:
     def _finalize_loss_landscape_artifacts(self) -> None:
         """Write all pending loss-landscape plots into one multi-page PDF.
 
-        Plots are organized into two columns per PDF page. Each plot keeps the
-        same full parallel-coordinate content; only the page organization changes.
-        All subplots share a single global scale per dimension so that, e.g., the
-        Data Loss axis uses the same min/max across every snapshot.
+        Plots are organized into two columns per PDF page. Each page carries a
+        single general experiment summary at the very top (instead of repeating
+        the physics equations under every subplot). All subplots share a single
+        global scale per dimension so that, e.g., the Data Loss axis uses the
+        same min/max across every snapshot.
         """
         if not self._loss_landscape_plot_tasks:
             return
@@ -624,6 +736,7 @@ class PINNTrainer:
 
         try:
             global_axis_ranges = self._compute_global_axis_ranges(self._loss_landscape_rows)
+            summary_text = self._build_experiment_summary()
 
             with PdfPages(self._loss_landscape_pdf_path) as pdf:
                 tasks = self._loss_landscape_plot_tasks
@@ -646,7 +759,8 @@ class PINNTrainer:
                         else:
                             ax.axis('off')
 
-                    fig.tight_layout()
+                    fig.suptitle(summary_text, fontsize=9, x=0.5, y=0.99)
+                    fig.tight_layout(rect=[0, 0, 1, 0.94])
                     pdf.savefig(fig)
                     plt.close(fig)
 
@@ -891,6 +1005,10 @@ class PINNTrainer:
     def _draw_loss_landscape_axis(self, ax, results: list, checkpoint_info: dict, global_axis_ranges: Optional[Dict[str, Tuple[float, float]]] = None):
         """Draw a full parallel-coordinate loss landscape on a given axis.
 
+        The physics equations are no longer rendered per subplot; they have been
+        replaced by a single page-level experiment summary added in
+        ``_finalize_loss_landscape_artifacts``.
+
         Args:
             ax: Matplotlib axis to draw on
             results: List of dictionaries containing loss landscape data
@@ -1084,33 +1202,7 @@ class PINNTrainer:
             spine.set_visible(False)
 
         title = f'Loss Landscape - {checkpoint_info["phase"].upper()} Epoch {checkpoint_info["epoch"]}'
-        equation_lines = self._get_physics_equation_lines()
-
-        if equation_lines:
-            # Render the full system of equations as a boxed block placed just
-            # below the subplot title. The title is pushed up by a pad sized to
-            # clear the box so the two never overlap and nothing is truncated.
-            equation_text = self._format_equation_block(equation_lines)
-            title_pad = 18 + len(equation_lines) * 18
-            ax.set_title(title, fontsize=12, pad=title_pad)
-            ax.text(
-                0.5,
-                1.02,
-                equation_text,
-                transform=ax.transAxes,
-                ha='center',
-                va='bottom',
-                fontsize=12,
-                zorder=5,
-                bbox=dict(
-                    boxstyle='round,pad=0.4',
-                    facecolor='white',
-                    edgecolor='black',
-                    alpha=0.9,
-                ),
-            )
-        else:
-            ax.set_title(title, fontsize=12)
+        ax.set_title(title, fontsize=12)
 
     def generate_loss_landscape(self, t_tensor: torch.Tensor, collocation_points: torch.Tensor, 
                                checkpoint_info: dict):

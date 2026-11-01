@@ -313,6 +313,8 @@ class PINNTrainer:
         "#20B2AA",
     ]
 
+    _BEST_CURVE_COLOR = "#FFD700"
+
     def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict):
         """Initialize the PINN trainer with model, physics constraints, and training data.
         
@@ -1341,12 +1343,44 @@ class PINNTrainer:
         finally:
             self._restore_compartmental_parameters(original_params)
 
+    def _find_best_result_row(self, results: list) -> Optional[dict]:
+        """Return the loss-landscape row with the lowest finite total loss.
+
+        When multiple rows tie within numerical tolerance, prefer the row that
+        represents the current/ground-truth parameter values.
+        """
+        best_row = None
+        best_loss = float('inf')
+
+        for result in results:
+            try:
+                total_loss = float(result.get('total_loss', float('nan')))
+            except (TypeError, ValueError):
+                continue
+
+            if not np.isfinite(total_loss):
+                continue
+
+            is_current = bool(result.get('is_current', False))
+
+            if best_row is None or total_loss < best_loss:
+                best_row = result
+                best_loss = total_loss
+            elif np.isclose(total_loss, best_loss, rtol=1e-12, atol=1e-12):
+                if is_current and not bool(best_row.get('is_current', False)):
+                    best_row = result
+                    best_loss = total_loss
+
+        return best_row
+
     def _draw_loss_landscape_axis(self, ax, results: list, checkpoint_info: dict, global_axis_ranges: Optional[Dict[str, Tuple[float, float]]] = None):
         """Draw a full parallel-coordinate loss landscape on a given axis.
 
         Loss axes are rendered on a shared log scale across snapshots, while
         parameter axes remain linear. The current/actual value line is drawn in
         black to distinguish it from the colored grid-search sweep lines.
+
+        The lowest-total-loss curve is highlighted in gold.
 
         Args:
             ax: Matplotlib axis to draw on
@@ -1466,6 +1500,8 @@ class PINNTrainer:
                     return None
                 ys.append(value_to_y(axis_label, numeric_value))
             return ys
+
+        best_result = self._find_best_result_row(results)
 
         # Draw vertical axis lines.
         for i in range(n_dims):
@@ -1607,6 +1643,52 @@ class PINNTrainer:
                 markeredgewidth=1.2,
                 zorder=3,
             )
+
+        # Highlight the best available curve: the parameter combination with
+        # the lowest finite total loss in this checkpoint's sweep.
+        best_ys = None
+        if best_result is not None:
+            best_ys = line_points(best_result)
+
+        if best_ys is not None:
+            best_label = 'Best total loss'
+            if bool(best_result.get('is_current', False)):
+                best_label += ' (current)'
+
+            ax.plot(
+                x_positions,
+                best_ys,
+                color=self._BEST_CURVE_COLOR,
+                linewidth=4.5,
+                alpha=0.95,
+                linestyle='-',
+                marker='D',
+                markersize=8,
+                markerfacecolor=self._BEST_CURVE_COLOR,
+                markeredgecolor='black',
+                markeredgewidth=1.2,
+                zorder=3.5,
+            )
+
+            try:
+                best_total_loss = float(best_result.get('total_loss', float('nan')))
+            except (TypeError, ValueError):
+                best_total_loss = float('nan')
+
+            if np.isfinite(best_total_loss):
+                ax.text(
+                    0.02,
+                    0.90,
+                    f"{best_label}: {best_total_loss:.4g}",
+                    transform=ax.transAxes,
+                    ha='left',
+                    va='top',
+                    fontsize=10,
+                    fontweight='bold',
+                    color='black',
+                    zorder=6,
+                    bbox=dict(facecolor=self._BEST_CURVE_COLOR, edgecolor='black', alpha=0.9, pad=1.5),
+                )
 
         # Gradient-conflict bar: cosine similarity between data and physics
         # gradients. -1 means conflictuous optimization, +1 means coherent.

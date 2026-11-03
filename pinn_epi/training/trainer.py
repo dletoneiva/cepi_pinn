@@ -898,7 +898,7 @@ class PINNTrainer:
                                 global_axis_ranges=global_axis_ranges
                             )
                         else:
-                            ax.axis('off')
+                            self._draw_cosine_similarity_development(ax, tasks)
 
                     if first_page:
                         fig.text(
@@ -1402,6 +1402,153 @@ class PINNTrainer:
 
         return best_row
 
+    def _draw_cosine_similarity_development(self, ax, tasks: list) -> None:
+        """Plot cosine similarity over training development in a blank subplot.
+
+        The y-axis is fixed from -1 to 1. A vertical dotted line marks the
+        Adam -> L-BFGS transition whenever L-BFGS checkpoints are present.
+        """
+        if not tasks:
+            ax.axis('off')
+            return
+
+        adam_epochs = self._as_scalar_float(self.config.get('adam_epochs', 5000))
+        if not np.isfinite(adam_epochs):
+            adam_epochs = 5000.0
+
+        points = []
+        for task in tasks:
+            info = task.get('checkpoint_info', {})
+            phase = str(info.get('phase', '')).lower().replace('-', '').replace('_', '')
+
+            x = self._as_scalar_float(info.get('global_step'))
+            if not np.isfinite(x):
+                epoch = self._as_scalar_float(info.get('epoch'))
+                if not np.isfinite(epoch):
+                    continue
+                x = epoch if phase != 'lbfgs' else adam_epochs + epoch
+
+            y = self._as_scalar_float(info.get('gradient_cosine'))
+            if not np.isfinite(y):
+                y = 0.0
+            y = float(np.clip(y, -1.0, 1.0))
+
+            points.append((float(x), y, phase))
+
+        if not points:
+            ax.set_xlim(0.0, 1.0)
+            ax.set_ylim(-1.0, 1.0)
+            ax.set_xlabel('Training step')
+            ax.set_ylabel('Cosine similarity')
+            ax.set_title(
+                'Gradient Conflict Over Training\n(y-axis fixed from -1 to 1)',
+                fontsize=12,
+            )
+            ax.grid(True, linestyle='--', alpha=0.35)
+            ax.text(
+                0.5,
+                0.5,
+                'No cosine similarity data',
+                transform=ax.transAxes,
+                ha='center',
+                va='center',
+                fontsize=12,
+            )
+            return
+
+        points.sort(key=lambda item: item[0])
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+
+        adam_xs = [p[0] for p in points if p[2] == 'adam']
+        adam_ys = [p[1] for p in points if p[2] == 'adam']
+        lbfgs_xs = [p[0] for p in points if p[2] == 'lbfgs']
+        lbfgs_ys = [p[1] for p in points if p[2] == 'lbfgs']
+
+        ax.plot(xs, ys, color='black', linewidth=2, alpha=0.75, zorder=2)
+        ax.axhline(0.0, color='gray', linewidth=0.8, linestyle='-', alpha=0.5, zorder=1)
+
+        if adam_xs:
+            ax.scatter(
+                adam_xs,
+                adam_ys,
+                color='#377EB8',
+                s=45,
+                marker='o',
+                edgecolors='white',
+                linewidths=1.0,
+                label='Adam',
+                zorder=3,
+            )
+
+        if lbfgs_xs:
+            ax.scatter(
+                lbfgs_xs,
+                lbfgs_ys,
+                color='#4DAF4A',
+                s=50,
+                marker='s',
+                edgecolors='white',
+                linewidths=1.0,
+                label='L-BFGS',
+                zorder=3,
+            )
+
+        transition_x = None
+        if lbfgs_xs:
+            if adam_xs and min(xs) <= adam_epochs <= max(xs):
+                transition_x = adam_epochs
+            else:
+                transition_x = min(lbfgs_xs)
+
+        if transition_x is not None:
+            ax.axvline(
+                transition_x,
+                linestyle=':',
+                color='gray',
+                linewidth=2,
+                alpha=0.85,
+                zorder=1,
+            )
+            ax.text(
+                transition_x,
+                0.96,
+                'Adam -> L-BFGS',
+                rotation=90,
+                va='top',
+                ha='left',
+                fontsize=9,
+                color='gray',
+                zorder=4,
+            )
+
+        x_min, x_max = min(xs), max(xs)
+        if x_max == x_min:
+            x_min -= 1.0
+            x_max += 1.0
+        else:
+            x_span = x_max - x_min
+            x_min -= x_span * 0.05
+            x_max += x_span * 0.05
+
+        if transition_x is not None:
+            span = x_max - x_min
+            x_min = min(x_min, transition_x - span * 0.02)
+            x_max = max(x_max, transition_x + span * 0.02)
+
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(-1.0, 1.0)
+        ax.set_xlabel('Training step')
+        ax.set_ylabel('Cosine similarity')
+        ax.set_title(
+            'Gradient Conflict Over Training\n(y-axis fixed from -1 to 1)',
+            fontsize=12,
+        )
+        ax.grid(True, linestyle='--', alpha=0.35)
+
+        if adam_xs or lbfgs_xs:
+            ax.legend(loc='best', fontsize=9)
+
     def _draw_loss_landscape_axis(self, ax, results: list, checkpoint_info: dict, global_axis_ranges: Optional[Dict[str, Tuple[float, float]]] = None):
         """Draw a full parallel-coordinate loss landscape on a given axis.
 
@@ -1868,6 +2015,16 @@ class PINNTrainer:
         if all_results:
             gradient_cosine = self._compute_loss_gradient_cosine(t_tensor, collocation_points)
             landscape_info = dict(checkpoint_info)
+
+            if 'global_step' not in landscape_info:
+                phase = str(landscape_info.get('phase', '')).lower().replace('-', '').replace('_', '')
+                epoch = self._as_scalar_float(landscape_info.get('epoch'))
+                adam_epochs = self._as_scalar_float(self.config.get('adam_epochs', 5000))
+                if not np.isfinite(adam_epochs):
+                    adam_epochs = 5000.0
+                if np.isfinite(epoch):
+                    landscape_info['global_step'] = epoch if phase != 'lbfgs' else adam_epochs + epoch
+
             landscape_info['gradient_cosine'] = gradient_cosine
             self.save_loss_landscape(all_results, landscape_info)
 
@@ -2093,7 +2250,7 @@ class PINNTrainer:
                 # Generate loss landscape at checkpoints
                 if epoch % adam_checkpoint_interval == 0 and epoch > 0:
                     logger.info(f"Generating loss landscape at Adam epoch {epoch}")
-                    checkpoint_info = {'phase': 'adam', 'epoch': epoch}
+                    checkpoint_info = {'phase': 'adam', 'epoch': epoch, 'global_step': epoch}
                     self.generate_loss_landscape(t_tensor, collocation_points, checkpoint_info)
 
             # L-BFGS phase with iteration tracking
@@ -2159,7 +2316,7 @@ class PINNTrainer:
                 # Generate loss landscape at checkpoints
                 if current_iter % lbfgs_checkpoint_interval == 0 and current_iter > 0:
                     logger.info(f"Generating loss landscape at L-BFGS iteration {current_iter}")
-                    checkpoint_info = {'phase': 'lbfgs', 'epoch': current_iter}
+                    checkpoint_info = {'phase': 'lbfgs', 'epoch': current_iter, 'global_step': adam_epochs + current_iter}
                     self.generate_loss_landscape(t_tensor, collocation_points, checkpoint_info)
                 
                 lbfgs_iteration[0] += 1

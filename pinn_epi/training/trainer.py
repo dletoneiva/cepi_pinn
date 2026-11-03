@@ -863,6 +863,10 @@ class PINNTrainer:
         Subsequent pages omit the header to avoid repetition. All subplots share
         a single global scale per dimension so that, e.g., the Data Loss axis
         uses the same min/max across every snapshot.
+
+        The cosine-similarity development plot is always appended as the final
+        subplot of the PDF, opening a new page when the last landscape page has
+        no blank slot.
         """
         if not self._loss_landscape_plot_tasks:
             return
@@ -880,25 +884,31 @@ class PINNTrainer:
 
             with PdfPages(self._loss_landscape_pdf_path) as pdf:
                 tasks = self._loss_landscape_plot_tasks
+                # Reserve one final slot for the cosine-similarity plot so it is
+                # always rendered, regardless of whether the last page has a
+                # blank slot.
+                n_slots = len(tasks) + 1
 
-                for start_idx in range(0, len(tasks), 2):
+                for start_idx in range(0, n_slots, 2):
                     first_page = start_idx == 0
                     fig, axes = plt.subplots(1, 2, figsize=(16, 8), squeeze=False)
 
                     for col_idx in range(2):
                         ax = axes[0][col_idx]
-                        task_idx = start_idx + col_idx
+                        slot_idx = start_idx + col_idx
 
-                        if task_idx < len(tasks):
-                            task = tasks[task_idx]
+                        if slot_idx < len(tasks):
+                            task = tasks[slot_idx]
                             self._draw_loss_landscape_axis(
                                 ax,
                                 task['results'],
                                 task['checkpoint_info'],
                                 global_axis_ranges=global_axis_ranges
                             )
-                        else:
+                        elif slot_idx == len(tasks):
                             self._draw_cosine_similarity_development(ax, tasks)
+                        else:
+                            ax.axis('off')
 
                     if first_page:
                         fig.text(

@@ -313,7 +313,12 @@ class PINNTrainer:
         "#20B2AA",
     ]
 
-    _BEST_CURVE_COLOR = "#FF3B30"
+    _BEST_CURVE_COLOR = "#007AFF"
+    _CURRENT_COLOR = "black"
+    _SWEEP_COLOR = "gray"
+    _ADAM_COLOR = "#377EB8"
+    _LBFGS_COLOR = "#4DAF4A"
+    _TRANSITION_COLOR = "gray"
 
     def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict):
         """Initialize the PINN trainer with model, physics constraints, and training data.
@@ -878,9 +883,14 @@ class PINNTrainer:
 
         try:
             global_axis_ranges = self._compute_global_axis_ranges(self._loss_landscape_rows)
+            best_curve_color = self._select_global_best_curve_color(self._loss_landscape_rows)
+            legend_handles = self._build_global_legend_handles(
+                best_curve_color=best_curve_color,
+                tasks=self._loss_landscape_plot_tasks
+            )
             header_text = self._build_experiment_header_text()
             header_line_count = max(1, len(header_text.splitlines()))
-            rect_top = max(0.58, 0.94 - 0.045 * header_line_count)
+            rect_top = max(0.50, 0.88 - 0.045 * header_line_count)
 
             with PdfPages(self._loss_landscape_pdf_path) as pdf:
                 tasks = self._loss_landscape_plot_tasks
@@ -903,7 +913,8 @@ class PINNTrainer:
                                 ax,
                                 task['results'],
                                 task['checkpoint_info'],
-                                global_axis_ranges=global_axis_ranges
+                                global_axis_ranges=global_axis_ranges,
+                                best_curve_color=best_curve_color
                             )
                         elif slot_idx == len(tasks):
                             self._draw_cosine_similarity_development(ax, tasks)
@@ -911,9 +922,21 @@ class PINNTrainer:
                             ax.axis('off')
 
                     if first_page:
+                        if legend_handles:
+                            fig.legend(
+                                handles=legend_handles,
+                                loc='upper center',
+                                bbox_to_anchor=(0.5, 0.995),
+                                ncol=min(len(legend_handles), 6),
+                                frameon=False,
+                                fontsize=9,
+                                handlelength=2.2,
+                                handletextpad=0.4,
+                            )
+
                         fig.text(
                             0.5,
-                            0.985,
+                            0.945,
                             header_text,
                             ha='center',
                             va='top',
@@ -1190,12 +1213,34 @@ class PINNTrainer:
 
         return [cmap(i / max(n_colors, 1)) for i in range(n_colors)]
 
+    @staticmethod
+    def _is_reddish_color(color: str) -> bool:
+        """Return True for colors that are visually red or red-dominant."""
+        if not isinstance(color, str) or not color.startswith("#"):
+            return False
+
+        hex_color = color.lstrip("#")
+        if len(hex_color) == 3:
+            hex_color = "".join(ch * 2 for ch in hex_color)
+
+        if len(hex_color) != 6:
+            return False
+
+        try:
+            r = int(hex_color[0:2], 16)
+            g = int(hex_color[2:4], 16)
+            b = int(hex_color[4:6], 16)
+        except ValueError:
+            return False
+
+        return r > 180 and (r - max(g, b)) > 70 and g < 120
+
     def _get_best_curve_color(self, used_colors: Optional[list] = None) -> str:
         """Choose a high-conspicuity color for the best curve.
 
         The color is taken from the high-conspicuity palette and, when possible,
-        avoids colors already assigned to swept parameters so the highlighted
-        best curve remains visually distinct.
+        avoids colors already assigned to swept parameters, phase indicators, and
+        red tones so the highlighted best curve remains visually distinct.
         """
         used = set()
         if used_colors:
@@ -1204,10 +1249,111 @@ class PINNTrainer:
                     used.add(color.lower())
 
         for color in self._HIGH_CONSPICUITY_PALETTE:
-            if color.lower() not in used:
+            if color.lower() in used or self._is_reddish_color(color):
+                continue
+            return color
+
+        for color in [
+            "#007AFF",
+            "#FF9500",
+            "#34C759",
+            "#00C7BE",
+            "#5856D6",
+            "#AF52DE",
+            "#FFCC00",
+        ]:
+            if color.lower() not in used and not self._is_reddish_color(color):
                 return color
 
         return self._BEST_CURVE_COLOR
+
+    def _select_global_best_curve_color(self, rows: Optional[list] = None) -> str:
+        """Choose one best-curve color for the whole PDF artifact."""
+        parameter_names = self._get_parameter_names()
+        if not parameter_names and rows:
+            parameter_names = self._get_unique_parameter_names_from_results(rows)
+
+        sweep_colors = self._get_sweep_colors(max(len(parameter_names), 1))
+        avoid_colors = [
+            self._CURRENT_COLOR,
+            self._SWEEP_COLOR,
+            self._ADAM_COLOR,
+            self._LBFGS_COLOR,
+            self._TRANSITION_COLOR,
+        ] + list(sweep_colors)
+
+        return self._get_best_curve_color(avoid_colors)
+
+    def _build_global_legend_handles(self, best_curve_color: str, tasks: Optional[list] = None) -> list:
+        """Build a compact global legend for the loss-landscape PDF."""
+        handles = [
+            plt.Line2D(
+                [0],
+                [0],
+                color=self._CURRENT_COLOR,
+                linewidth=3.5,
+                label="Current / ground truth",
+            ),
+            plt.Line2D(
+                [0],
+                [0],
+                color=best_curve_color,
+                linewidth=4.5,
+                alpha=0.95,
+                label="Best total loss",
+            ),
+            plt.Line2D(
+                [0],
+                [0],
+                color=self._SWEEP_COLOR,
+                linewidth=1.3,
+                alpha=0.55,
+                label="Swept parameters",
+            ),
+        ]
+
+        phases = set()
+        if tasks:
+            for task in tasks:
+                phase = str(task.get('checkpoint_info', {}).get('phase', '')).lower().replace('-', '').replace('_', '')
+                if phase:
+                    phases.add(phase)
+
+        if 'adam' in phases:
+            handles.append(
+                plt.Line2D(
+                    [0],
+                    [0],
+                    color=self._ADAM_COLOR,
+                    linewidth=2.5,
+                    label="Adam",
+                )
+            )
+
+        if 'lbfgs' in phases:
+            handles.append(
+                plt.Line2D(
+                    [0],
+                    [0],
+                    color=self._LBFGS_COLOR,
+                    linewidth=2.5,
+                    label="L-BFGS",
+                )
+            )
+
+        if 'adam' in phases and 'lbfgs' in phases:
+            handles.append(
+                plt.Line2D(
+                    [0],
+                    [0],
+                    color=self._TRANSITION_COLOR,
+                    linewidth=2,
+                    linestyle=':',
+                    label="Adam -> L-BFGS",
+                )
+            )
+
+        return handles
 
     @staticmethod
     def _deduplicate_tensors(tensors: list) -> list:
@@ -1475,34 +1621,39 @@ class PINNTrainer:
         lbfgs_xs = [p[0] for p in points if p[2] == 'lbfgs']
         lbfgs_ys = [p[1] for p in points if p[2] == 'lbfgs']
 
-        ax.plot(xs, ys, color='black', linewidth=2, alpha=0.75, zorder=2)
+        def plot_phase_line(phase_xs: list, phase_ys: list, color: str) -> None:
+            if not phase_xs:
+                return
+
+            if len(phase_xs) == 1:
+                x0 = phase_xs[0]
+                y0 = phase_ys[0]
+                x_span = max(abs(x0), 1.0) * 0.01
+                ax.plot(
+                    [x0 - x_span, x0 + x_span],
+                    [y0, y0],
+                    color=color,
+                    linewidth=2.5,
+                    solid_capstyle='round',
+                    zorder=2,
+                )
+            else:
+                ax.plot(
+                    phase_xs,
+                    phase_ys,
+                    color=color,
+                    linewidth=2.5,
+                    solid_capstyle='round',
+                    zorder=2,
+                )
+
         ax.axhline(0.0, color='gray', linewidth=0.8, linestyle='-', alpha=0.5, zorder=1)
 
-        if adam_xs:
-            ax.scatter(
-                adam_xs,
-                adam_ys,
-                color='#377EB8',
-                s=45,
-                marker='o',
-                edgecolors='white',
-                linewidths=1.0,
-                label='Adam',
-                zorder=3,
-            )
+        plot_phase_line(adam_xs, adam_ys, self._ADAM_COLOR)
+        plot_phase_line(lbfgs_xs, lbfgs_ys, self._LBFGS_COLOR)
 
-        if lbfgs_xs:
-            ax.scatter(
-                lbfgs_xs,
-                lbfgs_ys,
-                color='#4DAF4A',
-                s=50,
-                marker='s',
-                edgecolors='white',
-                linewidths=1.0,
-                label='L-BFGS',
-                zorder=3,
-            )
+        if not adam_xs and not lbfgs_xs:
+            ax.plot(xs, ys, color='black', linewidth=2, alpha=0.75, zorder=2)
 
         transition_x = None
         if lbfgs_xs:
@@ -1515,7 +1666,7 @@ class PINNTrainer:
             ax.axvline(
                 transition_x,
                 linestyle=':',
-                color='gray',
+                color=self._TRANSITION_COLOR,
                 linewidth=2,
                 alpha=0.85,
                 zorder=1,
@@ -1528,7 +1679,7 @@ class PINNTrainer:
                 va='top',
                 ha='left',
                 fontsize=9,
-                color='gray',
+                color=self._TRANSITION_COLOR,
                 zorder=4,
             )
 
@@ -1556,17 +1707,14 @@ class PINNTrainer:
         )
         ax.grid(True, linestyle='--', alpha=0.35)
 
-        if adam_xs or lbfgs_xs:
-            ax.legend(loc='best', fontsize=9)
-
-    def _draw_loss_landscape_axis(self, ax, results: list, checkpoint_info: dict, global_axis_ranges: Optional[Dict[str, Tuple[float, float]]] = None):
+    def _draw_loss_landscape_axis(self, ax, results: list, checkpoint_info: dict, global_axis_ranges: Optional[Dict[str, Tuple[float, float]]] = None, best_curve_color: Optional[str] = None):
         """Draw a full parallel-coordinate loss landscape on a given axis.
 
         Loss axes are rendered on a shared log scale across snapshots, while
         parameter axes remain linear. The current/actual value line is drawn in
         black to distinguish it from the colored grid-search sweep lines.
 
-        The lowest-total-loss curve is highlighted in a high-conspicuity color.
+        The lowest-total-loss curve is highlighted in a globally selected color.
 
         Args:
             ax: Matplotlib axis to draw on
@@ -1575,6 +1723,7 @@ class PINNTrainer:
             global_axis_ranges: Optional shared (lo, hi) range per dimension. When
                 provided, every subplot uses the same scale for each axis so the
                 charts are directly comparable.
+            best_curve_color: Optional globally selected color for the best curve.
         """
         if not results:
             ax.axis('off')
@@ -1794,7 +1943,9 @@ class PINNTrainer:
 
         # High-contrast color mapping for swept parameters.
         colors = self._get_sweep_colors(max(n_param_axes, 1))
-        best_curve_color = self._get_best_curve_color(colors)
+        if best_curve_color is None:
+            best_curve_color = self._select_global_best_curve_color(results)
+
         param_color_map = {
             name: colors[idx % len(colors)]
             for idx, name in enumerate(parameter_names)
@@ -1806,7 +1957,7 @@ class PINNTrainer:
             if ys is None:
                 continue
 
-            color = param_color_map.get(result.get('parameter'), 'gray')
+            color = param_color_map.get(result.get('parameter'), self._SWEEP_COLOR)
             ax.plot(x_positions, ys, color=color, alpha=0.55, linewidth=1.3, zorder=2)
 
         # Highlight current parameter values with a distinct black line.
@@ -1821,13 +1972,8 @@ class PINNTrainer:
             ax.plot(
                 x_positions,
                 ys,
-                color='black',
+                color=self._CURRENT_COLOR,
                 linewidth=3.5,
-                marker='o',
-                markersize=7,
-                markerfacecolor='black',
-                markeredgecolor='white',
-                markeredgewidth=1.2,
                 zorder=3,
             )
 
@@ -1838,10 +1984,6 @@ class PINNTrainer:
             best_ys = line_points(best_result)
 
         if best_ys is not None:
-            best_label = 'Best total loss'
-            if bool(best_result.get('is_current', False)):
-                best_label += ' (current)'
-
             ax.plot(
                 x_positions,
                 best_ys,
@@ -1849,33 +1991,8 @@ class PINNTrainer:
                 linewidth=4.5,
                 alpha=0.95,
                 linestyle='-',
-                marker='D',
-                markersize=8,
-                markerfacecolor=best_curve_color,
-                markeredgecolor='black',
-                markeredgewidth=1.2,
                 zorder=3.5,
             )
-
-            try:
-                best_total_loss = float(best_result.get('total_loss', float('nan')))
-            except (TypeError, ValueError):
-                best_total_loss = float('nan')
-
-            if np.isfinite(best_total_loss):
-                ax.text(
-                    0.02,
-                    0.90,
-                    f"{best_label}: {best_total_loss:.4g}",
-                    transform=ax.transAxes,
-                    ha='left',
-                    va='top',
-                    fontsize=10,
-                    fontweight='bold',
-                    color='black',
-                    zorder=6,
-                    bbox=dict(facecolor=best_curve_color, edgecolor='black', alpha=0.9, pad=1.5),
-                )
 
         # Gradient-conflict bar: cosine similarity between data and physics
         # gradients. -1 means conflictuous optimization, +1 means coherent.
@@ -1913,11 +2030,10 @@ class PINNTrainer:
         )
 
         ax.plot(
-            [marker_x],
-            [bar_y],
-            marker='v',
+            [marker_x, marker_x],
+            [bar_y - bar_half_height, bar_y + bar_half_height],
             color='black',
-            markersize=11,
+            linewidth=1.5,
             zorder=2,
         )
 

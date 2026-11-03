@@ -1518,6 +1518,52 @@ class PINNTrainer:
         finally:
             self._restore_compartmental_parameters(original_params)
 
+    def _log_gradient_cosine_to_mlflow(self, checkpoint_info: dict, gradient_cosine: Optional[float]) -> None:
+        """Log the data/physics gradient cosine similarity to MLflow by epoch.
+
+        The metric is logged using the continuous training step when available:
+        Adam epochs use their epoch number directly, while L-BFGS iterations are
+        offset by the number of Adam epochs. This keeps the metric aligned with
+        the cosine-similarity development plot.
+        """
+        if gradient_cosine is None or not self.mlflow_enabled:
+            return
+
+        try:
+            if not mlflow.active_run():
+                return
+
+            cosine = float(gradient_cosine)
+            if not np.isfinite(cosine):
+                return
+
+            phase = str(checkpoint_info.get('phase', '')).lower().replace('-', '').replace('_', '')
+            epoch = self._as_scalar_float(checkpoint_info.get('epoch'))
+            global_step = self._as_scalar_float(checkpoint_info.get('global_step'))
+
+            if not np.isfinite(global_step):
+                adam_epochs = self._as_scalar_float(self.config.get('adam_epochs', 5000))
+                if not np.isfinite(adam_epochs):
+                    adam_epochs = 5000.0
+
+                if np.isfinite(epoch):
+                    global_step = epoch if phase != 'lbfgs' else adam_epochs + epoch
+
+            metrics = {
+                "gradient_cosine": cosine,
+                "phase": 1.0 if phase == 'lbfgs' else 0.0,
+                "epoch": epoch if np.isfinite(epoch) else 0.0,
+            }
+
+            if np.isfinite(global_step):
+                mlflow.log_metrics(metrics, step=int(round(global_step)))
+            else:
+                mlflow.log_metrics(metrics)
+
+            logger.debug(f"Logged gradient cosine similarity to MLflow: {cosine:.4f}")
+        except Exception as e:
+            logger.warning(f"Failed to log gradient cosine similarity to MLflow: {e}")
+
     def _find_best_result_row(self, results: list) -> Optional[dict]:
         """Return the loss-landscape row with the lowest finite total loss.
 
@@ -2152,6 +2198,7 @@ class PINNTrainer:
                     landscape_info['global_step'] = epoch if phase != 'lbfgs' else adam_epochs + epoch
 
             landscape_info['gradient_cosine'] = gradient_cosine
+            self._log_gradient_cosine_to_mlflow(landscape_info, gradient_cosine)
             self.save_loss_landscape(all_results, landscape_info)
 
     def save_model_for_inference(self):

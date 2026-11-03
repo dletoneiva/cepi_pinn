@@ -313,7 +313,7 @@ class PINNTrainer:
         "#20B2AA",
     ]
 
-    _BEST_CURVE_COLOR = "#FFD700"
+    _BEST_CURVE_COLOR = "#FF3B30"
 
     def __init__(self, model: ModularPINN, physics_model: CompartmentalModel, data: dict, config: dict):
         """Initialize the PINN trainer with model, physics constraints, and training data.
@@ -1180,6 +1180,25 @@ class PINNTrainer:
 
         return [cmap(i / max(n_colors, 1)) for i in range(n_colors)]
 
+    def _get_best_curve_color(self, used_colors: Optional[list] = None) -> str:
+        """Choose a high-conspicuity color for the best curve.
+
+        The color is taken from the high-conspicuity palette and, when possible,
+        avoids colors already assigned to swept parameters so the highlighted
+        best curve remains visually distinct.
+        """
+        used = set()
+        if used_colors:
+            for color in used_colors:
+                if isinstance(color, str):
+                    used.add(color.lower())
+
+        for color in self._HIGH_CONSPICUITY_PALETTE:
+            if color.lower() not in used:
+                return color
+
+        return self._BEST_CURVE_COLOR
+
     @staticmethod
     def _deduplicate_tensors(tensors: list) -> list:
         """Return unique tensors by object identity."""
@@ -1346,11 +1365,14 @@ class PINNTrainer:
     def _find_best_result_row(self, results: list) -> Optional[dict]:
         """Return the loss-landscape row with the lowest finite total loss.
 
-        When multiple rows tie within numerical tolerance, prefer the row that
-        represents the current/ground-truth parameter values.
+        When the current/ground-truth row is numerically close to the best
+        minimum, prefer it so the highlighted curve corresponds to the true
+        parameters unless a clearly better sweep point exists.
         """
         best_row = None
         best_loss = float('inf')
+        current_row = None
+        current_loss = float('inf')
 
         for result in results:
             try:
@@ -1363,6 +1385,10 @@ class PINNTrainer:
 
             is_current = bool(result.get('is_current', False))
 
+            if is_current and current_row is None:
+                current_row = result
+                current_loss = total_loss
+
             if best_row is None or total_loss < best_loss:
                 best_row = result
                 best_loss = total_loss
@@ -1370,6 +1396,9 @@ class PINNTrainer:
                 if is_current and not bool(best_row.get('is_current', False)):
                     best_row = result
                     best_loss = total_loss
+
+        if current_row is not None and np.isclose(current_loss, best_loss, rtol=1e-4, atol=1e-6):
+            return current_row
 
         return best_row
 
@@ -1380,7 +1409,7 @@ class PINNTrainer:
         parameter axes remain linear. The current/actual value line is drawn in
         black to distinguish it from the colored grid-search sweep lines.
 
-        The lowest-total-loss curve is highlighted in gold.
+        The lowest-total-loss curve is highlighted in a high-conspicuity color.
 
         Args:
             ax: Matplotlib axis to draw on
@@ -1608,6 +1637,7 @@ class PINNTrainer:
 
         # High-contrast color mapping for swept parameters.
         colors = self._get_sweep_colors(max(n_param_axes, 1))
+        best_curve_color = self._get_best_curve_color(colors)
         param_color_map = {
             name: colors[idx % len(colors)]
             for idx, name in enumerate(parameter_names)
@@ -1658,13 +1688,13 @@ class PINNTrainer:
             ax.plot(
                 x_positions,
                 best_ys,
-                color=self._BEST_CURVE_COLOR,
+                color=best_curve_color,
                 linewidth=4.5,
                 alpha=0.95,
                 linestyle='-',
                 marker='D',
                 markersize=8,
-                markerfacecolor=self._BEST_CURVE_COLOR,
+                markerfacecolor=best_curve_color,
                 markeredgecolor='black',
                 markeredgewidth=1.2,
                 zorder=3.5,
@@ -1687,7 +1717,7 @@ class PINNTrainer:
                     fontweight='bold',
                     color='black',
                     zorder=6,
-                    bbox=dict(facecolor=self._BEST_CURVE_COLOR, edgecolor='black', alpha=0.9, pad=1.5),
+                    bbox=dict(facecolor=best_curve_color, edgecolor='black', alpha=0.9, pad=1.5),
                 )
 
         # Gradient-conflict bar: cosine similarity between data and physics

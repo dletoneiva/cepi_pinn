@@ -19,6 +19,7 @@ from pinn_epi.configs.model_loader import (
     get_simulation_config,
     get_synthetic_plotting_config
 )
+from pinn_epi.models.networks import create_pinn_model
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.plotting import plot_compartmental_solution, plot_actual_vs_predicted
 from pinn_epi.analysis.data_wrangler import save_simulation_data, save_trajectories, DataWrangler

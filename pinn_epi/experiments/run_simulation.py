@@ -6,7 +6,6 @@ import torch
 import numpy as np
 import logging
 import os
-from datetime import datetime
 from typing import Dict, Any
 
 from pinn_epi.configs.model_loader import (
@@ -133,9 +132,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         # Determine save path if saving is requested
         save_path = None
         if save_compartmental_plot:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_type = config_dict["compartmental"]["model"]["type"]
-            save_path = f"{artifact_dirs['figures']}/{model_type}_compartmental_{timestamp}.pdf"
+            save_path = os.path.join(artifact_dirs['figures'], "compartmental_solution.pdf")
             logger.info(f"Compartmental figure will be saved to: {save_path}")
         
         # Get model type for plotting
@@ -166,9 +163,6 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         logger.info(f"Data saving configuration - save_data: {save_data}")
         
         if save_data:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_type = config_dict["compartmental"]["model"]["type"]
-
             # Trajectory CSV goes to csv/, the JSON metadata sidecar to metadata/
             logger.info(f"Saving simulation data to: {artifact_dirs['csv']} and {artifact_dirs['metadata']}")
             save_simulation_data(
@@ -179,7 +173,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
                 save_dir=artifact_dirs["csv"],
                 metadata_dir=artifact_dirs["metadata"],
                 t_eval=t_eval,
-                file_prefix=f"{model_type}_simulation_{timestamp}"
+                file_prefix="simulation"
             )
             
             result["data_save_path"] = artifact_dirs["csv"]
@@ -248,9 +242,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         # Persist PINN predictions so the trained network's outputs remain
         # auditable alongside the ground-truth trajectories.
         try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_type = config_dict["compartmental"]["model"]["type"]
-            predictions_save_path = f"{artifact_dirs['csv']}/{model_type}_pinn_predictions_{timestamp}.csv"
+            predictions_save_path = os.path.join(artifact_dirs['csv'], "pinn_predictions.csv")
             save_trajectories(predicted_dict, predictions_save_path, t_eval=t_eval)
             result["predictions_save_path"] = predictions_save_path
             logger.info(f"PINN predictions saved to: {predictions_save_path}")
@@ -268,9 +260,7 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
             # Determine save path if saving is requested
             network_prediction_save_path = None
             if save_network_prediction:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                model_type = config_dict["compartmental"]["model"]["type"]
-                network_prediction_save_path = f"{artifact_dirs['figures']}/{model_type}_network_prediction_{timestamp}.pdf"
+                network_prediction_save_path = os.path.join(artifact_dirs['figures'], "network_prediction.pdf")
                 logger.info(f"Network prediction plot will be saved to: {network_prediction_save_path}")
             
             # Call the new plotting function

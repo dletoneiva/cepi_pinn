@@ -120,6 +120,7 @@ def save_simulation_data(
     save_dir: str,
     t_eval: Optional[np.ndarray] = None,
     file_prefix: str = "simulation",
+    metadata_dir: Optional[str] = None,
 ) -> None:
     """Save simulation data to files in the specified directory.
     
@@ -128,13 +129,19 @@ def save_simulation_data(
         model_params: Dictionary of model parameters
         initial_conditions: List of initial condition values
         compartment_names: List of compartment names in order
-        save_dir: Directory to save the data files
+        save_dir: Directory to save the trajectory CSV file
         t_eval: Time points array (optional)
         file_prefix: Prefix for saved files
+        metadata_dir: Directory for the JSON metadata sidecar (defaults to save_dir)
     """
-    # Create directory if it doesn't exist
+    # Create directories if they don't exist
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
+
+    if metadata_dir is None:
+        metadata_dir = str(save_dir)
+    metadata_dir = Path(metadata_dir)
+    metadata_dir.mkdir(parents=True, exist_ok=True)
     
     # Save trajectories as CSV
     if t_eval is not None:
@@ -153,7 +160,7 @@ def save_simulation_data(
         'initial_conditions': initial_conditions,
         'compartment_names': compartment_names
     }
-    json_path = save_dir / f"{file_prefix}_metadata.json"
+    json_path = metadata_dir / f"{file_prefix}_metadata.json"
     with open(json_path, 'w') as f:
         json.dump(metadata, f, indent=2)
     

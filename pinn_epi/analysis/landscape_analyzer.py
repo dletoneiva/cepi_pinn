@@ -22,7 +22,9 @@ class LossLandscapeAnalyzer:
     The analyzer owns the mutable per-run state of the loss-landscape
     artifact: the accumulated CSV rows, the CSV fieldnames, and the queued
     plot tasks. Rendering is delegated to
-    :mod:`pinn_epi.analysis.loss_landscape_plotting`.
+    :mod:`pinn_epi.analysis.loss_landscape_plotting`. The sweep CSV and the
+    multi-page PDF are routed to explicit directories so they land alongside
+    the other CSVs and figures of the run.
     """
 
     def __init__(
@@ -33,6 +35,8 @@ class LossLandscapeAnalyzer:
         network_params_provider: Callable = lambda: [],
         learnable_params: Optional[nn.ParameterDict] = None,
         output_dir: Optional[str] = None,
+        csv_dir: Optional[str] = None,
+        pdf_dir: Optional[str] = None,
     ):
         self.physics_model = physics_model
         self.loss_fn = loss_fn
@@ -40,6 +44,15 @@ class LossLandscapeAnalyzer:
         self.network_params_provider = network_params_provider
         self.learnable_params = learnable_params
         self.output_dir = output_dir
+
+        # Artifact routing: the sweep CSV is written to ``csv_dir`` and the
+        # multi-page PDF to ``pdf_dir``. When not provided, both fall back to
+        # the previous ``<output_dir>/loss_landscape`` location.
+        legacy_landscape_dir = (
+            os.path.join(output_dir, "loss_landscape") if output_dir else None
+        )
+        self.csv_dir = csv_dir if csv_dir is not None else legacy_landscape_dir
+        self.pdf_dir = pdf_dir if pdf_dir is not None else legacy_landscape_dir
 
         # Resolve a stable run identifier once: prefer the Hydra output
         # directory name (unique per run); fall back to a timestamp when
@@ -359,7 +372,7 @@ class LossLandscapeAnalyzer:
             result['global_step'] = global_step
 
         if self.csv_path is None:
-            if self.output_dir is None:
+            if self.csv_dir is None:
                 # No output directory available (e.g. outside Hydra): skip CSV
                 # writing but still queue the plot task so nothing is lost.
                 self.plot_tasks.append({
@@ -367,10 +380,11 @@ class LossLandscapeAnalyzer:
                     'checkpoint_info': checkpoint_info
                 })
                 return
-            landscape_dir = os.path.join(self.output_dir, "loss_landscape")
-            os.makedirs(landscape_dir, exist_ok=True)
-            self.csv_path = os.path.join(landscape_dir, "loss_landscape.csv")
-            self.pdf_path = os.path.join(landscape_dir, "loss_landscape.pdf")
+            os.makedirs(self.csv_dir, exist_ok=True)
+            self.csv_path = os.path.join(self.csv_dir, "loss_landscape.csv")
+            if self.pdf_dir is not None:
+                os.makedirs(self.pdf_dir, exist_ok=True)
+                self.pdf_path = os.path.join(self.pdf_dir, "loss_landscape.pdf")
 
         parameter_names = self.get_parameter_names()
 

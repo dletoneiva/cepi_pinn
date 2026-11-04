@@ -22,8 +22,7 @@ from pinn_epi.configs.model_loader import (
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.plotting import plot_compartmental_solution, plot_actual_vs_predicted
 from pinn_epi.analysis.data_wrangler import save_simulation_data, save_trajectories, DataWrangler
-from pinn_epi.training.trainer import PINNTrainer
-from pinn_epi.models.networks import create_pinn_model
+from pinn_epi.training.trainer import PINNTrainer, get_artifact_dirs
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -53,6 +52,14 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
     
     # Validate configuration
     validate_model_config(config_dict)
+    
+    # Resolve the Hydra output directory once and organize all run artifacts
+    # into fixed subdirectories: figures/, csv/, models/ and metadata/. The
+    # default .hydra/ config snapshot remains untouched at the run root.
+    hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+    artifact_dirs = get_artifact_dirs(hydra_output_dir)
+    for artifact_dir in artifact_dirs.values():
+        os.makedirs(artifact_dir, exist_ok=True)
     
     # Create model
     model = create_model_from_config(config_dict)
@@ -125,14 +132,9 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         # Determine save path if saving is requested
         save_path = None
         if save_compartmental_plot:
-            # Use Hydra's output directory
-            hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             model_type = config_dict["compartmental"]["model"]["type"]
-            save_path = f"{hydra_output_dir}/{model_type}_compartmental_{timestamp}.pdf"
-            
-            # Ensure the directory exists
-            os.makedirs(hydra_output_dir, exist_ok=True)
+            save_path = f"{artifact_dirs['figures']}/{model_type}_compartmental_{timestamp}.pdf"
             logger.info(f"Compartmental figure will be saved to: {save_path}")
         
         # Get model type for plotting
@@ -163,28 +165,24 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         logger.info(f"Data saving configuration - save_data: {save_data}")
         
         if save_data:
-            # Use Hydra's output directory for data as well
-            hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             model_type = config_dict["compartmental"]["model"]["type"]
-            
-            # Ensure the directory exists
-            os.makedirs(hydra_output_dir, exist_ok=True)
-            
-            # Save simulation data
-            logger.info(f"Saving simulation data to: {hydra_output_dir}")
+
+            # Trajectory CSV goes to csv/, the JSON metadata sidecar to metadata/
+            logger.info(f"Saving simulation data to: {artifact_dirs['csv']} and {artifact_dirs['metadata']}")
             save_simulation_data(
                 trajectories=trajectories,
                 model_params=params,
                 initial_conditions=y0,
                 compartment_names=model.compartment_names,
-                save_dir=hydra_output_dir,
+                save_dir=artifact_dirs["csv"],
+                metadata_dir=artifact_dirs["metadata"],
                 t_eval=t_eval,
                 file_prefix=f"{model_type}_simulation_{timestamp}"
             )
             
-            result["data_save_path"] = hydra_output_dir
-            logger.info(f"Data saved to: {hydra_output_dir}")
+            result["data_save_path"] = artifact_dirs["csv"]
+            logger.info(f"Data saved to: {artifact_dirs['csv']}")
     
     # Extract network and training configurations
     network_config = get_network_config(config_dict)
@@ -249,11 +247,9 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         # Persist PINN predictions so the trained network's outputs remain
         # auditable alongside the ground-truth trajectories.
         try:
-            hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             model_type = config_dict["compartmental"]["model"]["type"]
-            os.makedirs(hydra_output_dir, exist_ok=True)
-            predictions_save_path = f"{hydra_output_dir}/{model_type}_pinn_predictions_{timestamp}.csv"
+            predictions_save_path = f"{artifact_dirs['csv']}/{model_type}_pinn_predictions_{timestamp}.csv"
             save_trajectories(predicted_dict, predictions_save_path, t_eval=t_eval)
             result["predictions_save_path"] = predictions_save_path
             logger.info(f"PINN predictions saved to: {predictions_save_path}")
@@ -271,13 +267,9 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
             # Determine save path if saving is requested
             network_prediction_save_path = None
             if save_network_prediction:
-                hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 model_type = config_dict["compartmental"]["model"]["type"]
-                network_prediction_save_path = f"{hydra_output_dir}/{model_type}_network_prediction_{timestamp}.pdf"
-                
-                # Ensure the directory exists
-                os.makedirs(hydra_output_dir, exist_ok=True)
+                network_prediction_save_path = f"{artifact_dirs['figures']}/{model_type}_network_prediction_{timestamp}.pdf"
                 logger.info(f"Network prediction plot will be saved to: {network_prediction_save_path}")
             
             # Call the new plotting function

@@ -22,6 +22,25 @@ from pinn_epi.analysis.loss_landscape_plotting import as_scalar_float
 logger = logging.getLogger(__name__)
 
 
+def get_artifact_dirs(hydra_output_dir: Optional[str]) -> Dict[str, Optional[str]]:
+    """Return the standardized artifact subdirectories for a run.
+
+    Figures, CSVs, trained models and metadata sidecars each get a dedicated
+    subdirectory under the Hydra output directory so every artifact type is
+    easy to locate and the run root stays readable next to the default
+    ``.hydra/`` config snapshot.
+    """
+    if not hydra_output_dir:
+        return {'figures': None, 'csv': None, 'models': None, 'metadata': None}
+
+    return {
+        'figures': os.path.join(hydra_output_dir, "figures"),
+        'csv': os.path.join(hydra_output_dir, "csv"),
+        'models': os.path.join(hydra_output_dir, "models"),
+        'metadata': os.path.join(hydra_output_dir, "metadata"),
+    }
+
+
 class PINNTrainer:
     """Trainer for Physics-Informed Neural Networks (PINNs) in epidemiological modeling.
     
@@ -91,13 +110,15 @@ class PINNTrainer:
 
         # Loss-landscape artifact collection is delegated to the analyzer. The
         # Hydra output directory is resolved eagerly when available so the
-        # analyzer can write its CSV/PDF artifacts; outside Hydra (e.g. unit
-        # tests) it stays None and artifact writing is skipped gracefully.
+        # analyzer can write its sweep CSV into csv/ and its multi-page PDF
+        # into figures/; outside Hydra (e.g. unit tests) it stays None and
+        # artifact writing is skipped gracefully.
         hydra_output_dir = None
         try:
             hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
         except Exception:
             pass
+        analyzer_artifact_dirs = get_artifact_dirs(hydra_output_dir)
         self.landscape_analyzer = LossLandscapeAnalyzer(
             physics_model=physics_model,
             loss_fn=self.compute_loss,
@@ -105,6 +126,8 @@ class PINNTrainer:
             network_params_provider=lambda: list(self.model.parameters()),
             learnable_params=self.learnable_params,
             output_dir=hydra_output_dir,
+            csv_dir=analyzer_artifact_dirs['csv'],
+            pdf_dir=analyzer_artifact_dirs['figures'],
         )
 
     def _get_parameter_names(self) -> list:
@@ -278,7 +301,8 @@ class PINNTrainer:
         """Save the trained model for later inference.
         
         Saves both the model state dictionary and the full model object to enable
-        easy loading for inference. The files are saved in the Hydra output directory.
+        easy loading for inference. The files are saved in the models/ subdirectory
+        of the Hydra output directory.
         
         Returns:
             str: Path to the saved model file, or None if saving failed
@@ -286,14 +310,16 @@ class PINNTrainer:
         try:
             # Get Hydra output directory
             hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-            model_save_path = os.path.join(hydra_output_dir, "trained_pinn_model.pth")
+            artifact_dirs = get_artifact_dirs(hydra_output_dir)
+            os.makedirs(artifact_dirs['models'], exist_ok=True)
             
             # Save model state dict
+            model_save_path = os.path.join(artifact_dirs['models'], "trained_pinn_model.pth")
             torch.save(self.model.state_dict(), model_save_path)
             logger.info(f"Saved model for inference to: {model_save_path}")
             
             # Also save the full model for easier loading
-            full_model_path = os.path.join(hydra_output_dir, "trained_pinn_model_full.pth")
+            full_model_path = os.path.join(artifact_dirs['models'], "trained_pinn_model_full.pth")
             torch.save(self.model, full_model_path)
             logger.info(f"Saved full model to: {full_model_path}")
             
@@ -423,7 +449,9 @@ class PINNTrainer:
 
             # Setup CSV logging
             hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-            csv_file_path = os.path.join(hydra_output_dir, "training_metrics.csv")
+            artifact_dirs = get_artifact_dirs(hydra_output_dir)
+            os.makedirs(artifact_dirs['csv'], exist_ok=True)
+            csv_file_path = os.path.join(artifact_dirs['csv'], "training_metrics.csv")
             
             # Initialize CSV file with headers including phase column and all compartmental parameters
             parameter_names = self._get_parameter_names()
@@ -434,7 +462,7 @@ class PINNTrainer:
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
                 writer.writeheader()
             
-            # Write a provenance sidecar next to the metrics CSV: the full
+            # Write a provenance sidecar into the metadata/ directory: the full
             # training config plus a timestamp, and the run_id shared with
             # the loss-landscape artifacts so all CSVs from one run can be
             # cross-referenced during audits.
@@ -450,7 +478,8 @@ class PINNTrainer:
                     'run_id': self.landscape_analyzer.run_id,
                     'config': config_payload,
                 }
-                metadata_path = os.path.join(hydra_output_dir, "run_metadata.json")
+                os.makedirs(artifact_dirs['metadata'], exist_ok=True)
+                metadata_path = os.path.join(artifact_dirs['metadata'], "run_metadata.json")
                 with open(metadata_path, 'w') as f:
                     json.dump(run_metadata, f, indent=2, default=str)
                 logger.info(f"Run metadata saved to: {metadata_path}")

@@ -21,7 +21,7 @@ from pinn_epi.configs.model_loader import (
 )
 from pinn_epi.analysis.evaluator import solve_compartmental_model
 from pinn_epi.analysis.plotting import plot_compartmental_solution, plot_actual_vs_predicted
-from pinn_epi.analysis.data_wrangler import save_simulation_data, DataWrangler
+from pinn_epi.analysis.data_wrangler import save_simulation_data, save_trajectories, DataWrangler
 from pinn_epi.training.trainer import PINNTrainer
 from pinn_epi.models.networks import create_pinn_model
 
@@ -245,6 +245,20 @@ def run_simulation_from_config(config: DictConfig) -> Dict[str, Any]:
         predicted_dict = {}
         for i, name in enumerate(model.compartment_names):
             predicted_dict[name] = predicted_trajectories[:, i]
+        
+        # Persist PINN predictions so the trained network's outputs remain
+        # auditable alongside the ground-truth trajectories.
+        try:
+            hydra_output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            model_type = config_dict["compartmental"]["model"]["type"]
+            os.makedirs(hydra_output_dir, exist_ok=True)
+            predictions_save_path = f"{hydra_output_dir}/{model_type}_pinn_predictions_{timestamp}.csv"
+            save_trajectories(predicted_dict, predictions_save_path, t_eval=t_eval)
+            result["predictions_save_path"] = predictions_save_path
+            logger.info(f"PINN predictions saved to: {predictions_save_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save PINN predictions: {e}")
         
         # Plot actual vs predicted if requested
         plotting_config = config_dict.get("plotting", {})

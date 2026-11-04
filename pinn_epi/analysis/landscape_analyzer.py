@@ -3,6 +3,7 @@
 import csv
 import logging
 import os
+from datetime import datetime
 from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
@@ -39,6 +40,15 @@ class LossLandscapeAnalyzer:
         self.network_params_provider = network_params_provider
         self.learnable_params = learnable_params
         self.output_dir = output_dir
+
+        # Resolve a stable run identifier once: prefer the Hydra output
+        # directory name (unique per run); fall back to a timestamp when
+        # running outside Hydra (e.g. unit tests).
+        if output_dir:
+            self.run_id = os.path.basename(os.path.normpath(output_dir))
+        else:
+            self.run_id = datetime.now().strftime("run_%Y%m%d_%H%M%S")
+
         self.rows: list = []
         self.fieldnames: list = []
         self.plot_tasks: list = []
@@ -328,12 +338,25 @@ class LossLandscapeAnalyzer:
     def save_results(self, results: list, checkpoint_info: dict) -> None:
         """Append loss landscape results to one combined CSV and queue one PDF plot.
 
+        Every row is stamped with run-level provenance: a stable ``run_id``
+        (resolved once from the Hydra output directory name, or a timestamp
+        outside Hydra) and the continuous ``global_step`` training step, so
+        the CSV stays self-contained for auditing alongside
+        ``training_metrics.csv``.
+
         Args:
             results: List of dictionaries containing loss landscape data
             checkpoint_info: Dictionary with phase and epoch information
         """
         if not results:
             return
+
+        # Stamp provenance onto every row before any early return so queued
+        # plot tasks carry the same identifiers as the CSV rows.
+        global_step = checkpoint_info.get('global_step', float('nan'))
+        for result in results:
+            result['run_id'] = self.run_id
+            result['global_step'] = global_step
 
         if self.csv_path is None:
             if self.output_dir is None:
@@ -355,7 +378,8 @@ class LossLandscapeAnalyzer:
             parameter_names = llp.get_unique_parameter_names_from_results(results)
 
         desired_fields = (
-            parameter_names
+            ['run_id', 'global_step']
+            + parameter_names
             + [
                 'total_loss',
                 'data_loss',

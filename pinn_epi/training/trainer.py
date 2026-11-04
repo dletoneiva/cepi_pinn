@@ -11,6 +11,8 @@ import mlflow.pytorch
 import hydra
 import os
 import csv
+import json
+from datetime import datetime
 import numpy as np
 from pinn_epi.utils.device_utils import DEVICE  # Import the centralized device
 from pinn_epi.analysis.landscape_analyzer import LossLandscapeAnalyzer
@@ -431,6 +433,29 @@ class PINNTrainer:
             with open(csv_file_path, 'w', newline='') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
                 writer.writeheader()
+            
+            # Write a provenance sidecar next to the metrics CSV: the full
+            # training config plus a timestamp, and the run_id shared with
+            # the loss-landscape artifacts so all CSVs from one run can be
+            # cross-referenced during audits.
+            try:
+                config_payload = self.config
+                if not isinstance(config_payload, dict):
+                    # Support OmegaConf-based configs passed directly to the trainer.
+                    from omegaconf import OmegaConf
+                    config_payload = OmegaConf.to_container(config_payload, resolve=True)
+
+                run_metadata = {
+                    'timestamp': datetime.now().isoformat(),
+                    'run_id': self.landscape_analyzer.run_id,
+                    'config': config_payload,
+                }
+                metadata_path = os.path.join(hydra_output_dir, "run_metadata.json")
+                with open(metadata_path, 'w') as f:
+                    json.dump(run_metadata, f, indent=2, default=str)
+                logger.info(f"Run metadata saved to: {metadata_path}")
+            except Exception as e:
+                logger.warning(f"Failed to write run metadata: {e}")
             
             # Adam phase
             adam_checkpoint_interval = max(1, adam_epochs // 4)  # Every 25% of training

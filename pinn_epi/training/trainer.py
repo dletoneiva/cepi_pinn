@@ -434,7 +434,7 @@ class PINNTrainer:
             adam_epochs = self.config.get('adam_epochs', 5000)
             lbfgs_max_iter = self.config.get('lbfgs_max_iter', 100)
             n_collocation_points = self.config.get('n_collocation_points', 100)
-            log_interval = 50  # Fixed log interval for MLflow
+            log_interval = 50  # Console/MLflow cadence only; the CSV logs every iteration
             
             # Sample collocation points
             t_min, t_max = t_array.min(), t_array.max()
@@ -450,9 +450,10 @@ class PINNTrainer:
             os.makedirs(artifact_dirs['csv'], exist_ok=True)
             csv_file_path = os.path.join(artifact_dirs['csv'], "training_metrics.csv")
             
-            # Initialize CSV file with headers including phase column and all compartmental parameters
+            # Initialize CSV file with headers including phase column, the
+            # per-iteration gradient-cosine column, and all compartmental parameters
             parameter_names = self._get_parameter_names()
-            fieldnames = ['phase', 'epoch', 'total_loss', 'data_loss', 'physics_loss'] + parameter_names
+            fieldnames = ['phase', 'epoch', 'total_loss', 'data_loss', 'physics_loss', 'gradient_cosine'] + parameter_names
             fieldnames = list(dict.fromkeys(fieldnames))
             
             with open(csv_file_path, 'w', newline='') as csvfile:
@@ -493,9 +494,34 @@ class PINNTrainer:
                 total_loss.backward()
                 optimizer_adam.step()
 
-                if epoch % log_interval == 0:
-                    current_parameter_values = self._get_parameter_values()
+                # Per-iteration gradient conflict. Same computation as the
+                # checkpoint snapshots and evaluated at the same post-step
+                # parameter state, so values line up with loss_landscape.csv.
+                gradient_cosine = as_scalar_float(
+                    self.landscape_analyzer.compute_loss_gradient_cosine(t_tensor, self.data, collocation_points)
+                )
+                current_parameter_values = self._get_parameter_values()
 
+                # Log every training iteration to the training-metrics CSV.
+                try:
+                    row_data = {
+                        'phase': 'adam',
+                        'epoch': epoch,
+                        'total_loss': total_loss.item(),
+                        'data_loss': data_loss.item(),
+                        'physics_loss': physics_loss.item(),
+                        'gradient_cosine': gradient_cosine,
+                    }
+
+                    row_data.update(current_parameter_values)
+
+                    with open(csv_file_path, 'a', newline='') as csvfile:
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
+                        writer.writerow(row_data)
+                except Exception as e:
+                    logger.warning(f"Failed to log metrics to CSV at epoch {epoch}: {e}")
+
+                if epoch % log_interval == 0:
                     # Create log message with loss values and parameter values
                     log_message = f"[Adam] Epoch {epoch}/{adam_epochs} - Total Loss: {total_loss.item():.4f}, Data Loss: {data_loss.item():.4f}, Physics Loss: {physics_loss.item():.4f}"
                     
@@ -525,24 +551,6 @@ class PINNTrainer:
                                 logger.debug(f"Logged metrics to MLflow at epoch {epoch}")
                         except Exception as e:
                             logger.warning(f"Failed to log metrics to MLflow at epoch {epoch}: {e}")
-                    
-                    # Log metrics to CSV (keep string phase for readability)
-                    try:
-                        row_data = {
-                            'phase': 'adam',
-                            'epoch': epoch,
-                            'total_loss': total_loss.item(),
-                            'data_loss': data_loss.item(),
-                            'physics_loss': physics_loss.item()
-                        }
-                        
-                        row_data.update(current_parameter_values)
-                        
-                        with open(csv_file_path, 'a', newline='') as csvfile:
-                            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
-                            writer.writerow(row_data)
-                    except Exception as e:
-                        logger.warning(f"Failed to log metrics to CSV at epoch {epoch}: {e}")
                 
                 # Generate loss landscape at checkpoints
                 if epoch in adam_checkpoint_epochs:
@@ -562,6 +570,10 @@ class PINNTrainer:
                 optimizer_lbfgs.zero_grad()
                 total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, self.data, collocation_points)
                 total_loss.backward()
+
+                gradient_cosine = as_scalar_float(
+                    self.landscape_analyzer.compute_loss_gradient_cosine(t_tensor, self.data, collocation_points)
+                )
                 
                 current_parameter_values = self._get_parameter_values()
 
@@ -603,7 +615,8 @@ class PINNTrainer:
                         'epoch': current_iter,
                         'total_loss': total_loss.item(),
                         'data_loss': data_loss.item(),
-                        'physics_loss': physics_loss.item()
+                        'physics_loss': physics_loss.item(),
+                        'gradient_cosine': gradient_cosine,
                     }
                     
                     row_data.update(current_parameter_values)

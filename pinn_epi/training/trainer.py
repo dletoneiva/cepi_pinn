@@ -429,9 +429,6 @@ class PINNTrainer:
             # Optimizers - include both network parameters and learnable physics parameters
             trainable_vars = list(self.model.parameters()) + list(self.learnable_params.parameters())
             optimizer_adam = torch.optim.Adam(trainable_vars, lr=self.config.get('adam_lr', 1e-3))
-            optimizer_lbfgs = torch.optim.LBFGS(trainable_vars, 
-                                              max_iter=self.config.get('lbfgs_max_iter', 100), 
-                                              line_search_fn="strong_wolfe")
 
             # Training parameters
             adam_epochs = self.config.get('adam_epochs', 5000)
@@ -487,7 +484,9 @@ class PINNTrainer:
                 logger.warning(f"Failed to write run metadata: {e}")
             
             # Adam phase
-            adam_checkpoint_interval = max(1, adam_epochs // 4)  # Every 25% of training
+            # Snapshot at 0%, 25%, 50% and 75% of the Adam phase; the 100% snapshot is
+            # taken after the loop because range(adam_epochs) never reaches adam_epochs.
+            adam_checkpoint_epochs = {0, adam_epochs // 4, adam_epochs // 2, (3 * adam_epochs) // 4}
             for epoch in range(adam_epochs):
                 optimizer_adam.zero_grad()
                 total_loss, data_loss, physics_loss = self.compute_loss(t_tensor, self.data, collocation_points)
@@ -546,14 +545,18 @@ class PINNTrainer:
                         logger.warning(f"Failed to log metrics to CSV at epoch {epoch}: {e}")
                 
                 # Generate loss landscape at checkpoints
-                if epoch % adam_checkpoint_interval == 0 and epoch > 0:
+                if epoch in adam_checkpoint_epochs:
                     logger.info(f"Generating loss landscape at Adam epoch {epoch}")
                     checkpoint_info = {'phase': 'adam', 'epoch': epoch, 'global_step': epoch}
                     self.generate_loss_landscape(t_tensor, collocation_points, checkpoint_info)
 
+            # Final Adam snapshot at 100% of the phase
+            logger.info(f"Generating loss landscape at Adam epoch {adam_epochs} (end of Adam phase)")
+            checkpoint_info = {'phase': 'adam', 'epoch': adam_epochs, 'global_step': adam_epochs}
+            self.generate_loss_landscape(t_tensor, collocation_points, checkpoint_info)
+
             # L-BFGS phase with iteration tracking
             lbfgs_iteration = [0]  # Use list to make it mutable in closure
-            lbfgs_checkpoint_interval = max(1, lbfgs_max_iter // 4)  # Every 25% of training
             
             def closure():
                 optimizer_lbfgs.zero_grad()
@@ -611,16 +614,31 @@ class PINNTrainer:
                 except Exception as e:
                     logger.warning(f"Failed to log metrics to CSV at L-BFGS iteration {current_iter}: {e}")
                 
-                # Generate loss landscape at checkpoints
-                if current_iter % lbfgs_checkpoint_interval == 0 and current_iter > 0:
-                    logger.info(f"Generating loss landscape at L-BFGS iteration {current_iter}")
-                    checkpoint_info = {'phase': 'lbfgs', 'epoch': current_iter, 'global_step': adam_epochs + current_iter}
-                    self.generate_loss_landscape(t_tensor, collocation_points, checkpoint_info)
-                
                 lbfgs_iteration[0] += 1
                 return total_loss
 
-            optimizer_lbfgs.step(closure)
+            # Run L-BFGS in four consecutive chunks and take a loss-landscape snapshot
+            # after each chunk (25%, 50%, 75%, 100% of the phase). A fresh optimizer per
+            # chunk guarantees all four snapshots exist even when L-BFGS converges (and
+            # stops) long before lbfgs_max_iter, which previously produced no L-BFGS
+            # snapshots at all.
+            lbfgs_chunk_size = max(1, lbfgs_max_iter // 4)
+            for chunk_idx in range(4):
+                optimizer_lbfgs = torch.optim.LBFGS(
+                    trainable_vars,
+                    max_iter=lbfgs_chunk_size,
+                    line_search_fn="strong_wolfe",
+                )
+                optimizer_lbfgs.step(closure)
+
+                chunk_end_iter = (chunk_idx + 1) * lbfgs_chunk_size
+                logger.info(f"Generating loss landscape at L-BFGS iteration {chunk_end_iter}")
+                checkpoint_info = {
+                    'phase': 'lbfgs',
+                    'epoch': chunk_end_iter,
+                    'global_step': adam_epochs + chunk_end_iter,
+                }
+                self.generate_loss_landscape(t_tensor, collocation_points, checkpoint_info)
             
             # Log the final model
             if self.mlflow_enabled:
